@@ -109,8 +109,14 @@ function invalidate(): void {
 // (JSON/YAML) and in NestJS `@ApiOperation({ operationId: 'x' })` decorators.
 const OPERATION_ID_LINE = /operationId["']?\s*:\s*["']([\w.\-/]+)["']/;
 
-/** operationId → every scouted endpoint that declares it (api + internal channels). */
+/**
+ * operationId → every scouted endpoint that declares it (api + internal
+ * channels). Memoized against the current `state`; rebuilds only when the index
+ * changes (CodeLens/Definition can fire often on large specs).
+ */
+let opIndexCache: { for: Scouted[] | null; map: Map<string, Scouted[]> } | null = null;
 function byOperationId(): Map<string, Scouted[]> {
+  if (opIndexCache?.for === state) return opIndexCache.map;
   const map = new Map<string, Scouted[]>();
   for (const scouted of state ?? []) {
     const id = scouted.endpoint.operation.operationId;
@@ -119,6 +125,7 @@ function byOperationId(): Map<string, Scouted[]> {
     list.push(scouted);
     map.set(id, list);
   }
+  opIndexCache = { for: state, map };
   return map;
 }
 

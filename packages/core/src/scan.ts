@@ -62,10 +62,11 @@ export function scanContent(
 
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i]!;
-    const lineNumber = i + 1;
-    const previewLine = previewLines[i] ?? line;
-
     if (ignoreLines.some((re) => re.test(line))) continue;
+
+    const lineNumber = i + 1;
+    // Computed once per line (not per hit) and from the original (unmasked) text.
+    const linePreview = preview(previewLines[i] ?? line);
 
     if (hasSymbols) {
       IDENTIFIER.lastIndex = 0;
@@ -79,7 +80,7 @@ export function scanContent(
               file: relFile,
               line: lineNumber,
               column: token.index + 1,
-              preview: preview(previewLine),
+              preview: linePreview,
               matcher: ref.template,
             },
           });
@@ -91,22 +92,18 @@ export function scanContent(
       for (const matcher of matchers.regexes) {
         if (matcher.anchor && !line.includes(matcher.anchor)) continue;
         matcher.regex.lastIndex = 0;
-        for (
-          let match = matcher.regex.exec(line);
-          match !== null;
-          match = matcher.regex.exec(line)
-        ) {
+        for (let m = matcher.regex.exec(line); m !== null; m = matcher.regex.exec(line)) {
           hits.push({
             op: matcher.op,
             site: {
               file: relFile,
               line: lineNumber,
-              column: match.index + 1,
-              preview: preview(previewLine),
+              column: m.index + 1,
+              preview: linePreview,
               matcher: matcher.template,
             },
           });
-          if (match[0].length === 0) matcher.regex.lastIndex += 1;
+          if (m[0].length === 0) matcher.regex.lastIndex += 1;
         }
       }
     }
