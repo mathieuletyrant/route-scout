@@ -52,5 +52,6 @@ Each matcher's `template` is expanded per operation. Placeholders:
 - **Route Scout: Find Endpoint / Show Usage**
 - **Route Scout: Rebuild Index**
 
-The engine is [`@route-scout/core`](https://www.npmjs.com/package/@route-scout/core); there's also a
-[`route-scout` CLI](https://www.npmjs.com/package/route-scout) for CI and dead-endpoint reports.
+The engine is [`@route-scout/core`](https://github.com/mathieuletyrant/route-scout/tree/main/packages/core);
+there's also a [`route-scout` CLI](https://github.com/mathieuletyrant/route-scout/tree/main/packages/cli)
+for CI and dead-endpoint reports.

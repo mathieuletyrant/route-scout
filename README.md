@@ -23,16 +23,20 @@ It's **spec-agnostic and framework-agnostic**. You configure three things:
 
 ## Quick start
 
-```bash
-# CLI, zero config (auto-discovers specs + scans common sources)
-npx route-scout
-
-# Which endpoints are never called?
-npx route-scout --unused-only
-```
-
-Or install the **Route Scout** extension in VSCode and open a spec file — a `⟶ N usages` lens appears
+Install the **Route Scout** extension in VSCode and open a spec file — a `⟶ N usages` lens appears
 above every operation.
+
+Prefer the terminal? Build the CLI from this repo (it isn't published to npm):
+
+```bash
+pnpm install && pnpm build
+
+# zero config (auto-discovers specs + scans common sources)
+node packages/cli/dist/cli.js
+
+# which endpoints are never called?
+node packages/cli/dist/cli.js --unused-only
+```
 
 ## How matching works
 
