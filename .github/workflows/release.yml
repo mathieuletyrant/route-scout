@@ -1,0 +1,56 @@
+name: Release
+
+# Publishes on a version tag. Bump the package versions, then:
+#   git tag v0.1.0 && git push origin v0.1.0
+#
+# Each target runs only when its secret is configured:
+#   NPM_TOKEN   → npm    (@route-scout/core, route-scout)
+#   VSCE_PAT    → VS Marketplace
+#   OVSX_TOKEN  → Open VSX
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      VSCE_PAT: ${{ secrets.VSCE_PAT }}
+      OVSX_TOKEN: ${{ secrets.OVSX_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - run: pnpm install --frozen-lockfile
+
+      # Gate the release on a green build.
+      - run: pnpm check
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+
+      - name: Publish npm packages
+        if: ${{ env.NPM_TOKEN != '' }}
+        run: pnpm --filter @route-scout/core --filter route-scout publish --access public --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Package extension
+        run: pnpm package:vscode
+
+      - name: Publish to VS Marketplace
+        if: ${{ env.VSCE_PAT != '' }}
+        working-directory: packages/vscode
+        run: pnpm exec vsce publish --packagePath route-scout.vsix
+
+      - name: Publish to Open VSX
+        if: ${{ env.OVSX_TOKEN != '' }}
+        run: pnpm dlx ovsx publish packages/vscode/route-scout.vsix -p "$OVSX_TOKEN"

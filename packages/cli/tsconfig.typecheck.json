@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "types": ["node"],
+    "paths": {
+      "@route-scout/core": ["../core/src/index.ts"]
+    }
+  },
+  "include": ["src"]
+}

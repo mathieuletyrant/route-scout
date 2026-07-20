@@ -1,0 +1,17 @@
+{
+  "openapi": "3.0.0",
+  "info": { "title": "Petstore", "version": "1.0.0" },
+  "paths": {
+    "/pets": {
+      "get": { "operationId": "listPets", "summary": "List pets", "tags": ["pets"] },
+      "post": { "operationId": "createPet", "summary": "Create a pet", "tags": ["pets"] }
+    },
+    "/pets/{petId}": {
+      "get": { "operationId": "getPetById", "summary": "Get a pet", "tags": ["pets"] },
+      "delete": { "operationId": "deletePet", "tags": ["pets"] }
+    },
+    "/health": {
+      "get": { "summary": "Health check with no operationId" }
+    }
+  }
+}

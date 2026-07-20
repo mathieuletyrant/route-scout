@@ -1,0 +1,30 @@
+{
+  "name": "route-scout-monorepo",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Find where each OpenAPI endpoint is used across your codebase — CLI + VSCode extension.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mathieuletyrant/route-scout.git"
+  },
+  "packageManager": "pnpm@11.15.1",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "pnpm -r run build",
+    "typecheck": "pnpm -r run typecheck",
+    "test": "pnpm -r run test",
+    "check": "biome check .",
+    "lint": "biome lint .",
+    "format": "biome check --write .",
+    "format:check": "biome format .",
+    "package:vscode": "pnpm --filter route-scout-vscode run package"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.4",
+    "@types/node": "^22.10.7",
+    "typescript": "^7.0.2"
+  }
+}

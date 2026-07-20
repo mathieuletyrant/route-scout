@@ -1,0 +1,212 @@
+{
+  "name": "route-scout-vscode",
+  "displayName": "Route Scout",
+  "description": "Find where each OpenAPI endpoint is used — CodeLens, tree view, and quick search over your specs.",
+  "version": "0.1.0",
+  "publisher": "MathieuLeTyrant",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mathieuletyrant/route-scout.git",
+    "directory": "packages/vscode"
+  },
+  "bugs": {
+    "url": "https://github.com/mathieuletyrant/route-scout/issues"
+  },
+  "homepage": "https://github.com/mathieuletyrant/route-scout#readme",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other",
+    "Visualization"
+  ],
+  "keywords": [
+    "openapi",
+    "swagger",
+    "api",
+    "usage",
+    "codelens"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "configuration": {
+      "title": "Route Scout",
+      "properties": {
+        "routeScout.specs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "**/openapi*.{json,yaml,yml}",
+            "**/*.openapi.{json,yaml,yml}",
+            "**/swagger*.{json,yaml,yml}"
+          ],
+          "markdownDescription": "Globs (relative to each workspace folder) selecting the OpenAPI spec files."
+        },
+        "routeScout.sources": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "**/*.{ts,tsx,js,jsx,mjs,cjs,vue,svelte}"
+          ],
+          "markdownDescription": "Globs selecting the source files scanned for endpoint usage."
+        },
+        "routeScout.exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "**/node_modules/**",
+            "**/dist/**",
+            "**/build/**",
+            "**/out/**",
+            "**/coverage/**",
+            "**/.git/**"
+          ],
+          "markdownDescription": "Globs excluded from both spec and source discovery."
+        },
+        "routeScout.usage": {
+          "type": "array",
+          "markdownDescription": "How an endpoint appears in source. Each matcher's `template` is expanded per operation with placeholders: `{operationId}`, `{OperationId}`, `{operationId:camel|pascal|kebab|snake|constant}`, `{method}`, `{METHOD}`, `{path}`, `{pathRegex}`.",
+          "items": {
+            "type": "object",
+            "required": [
+              "kind",
+              "template"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "symbol",
+                  "regex"
+                ],
+                "markdownEnumDescriptions": [
+                  "Template expands to a single identifier; whole-identifier match (fast; best for generated clients).",
+                  "Template expands to a regular expression matched against each line."
+                ]
+              },
+              "template": {
+                "type": "string"
+              },
+              "flags": {
+                "type": "string",
+                "description": "Extra RegExp flags (regex matchers only)."
+              }
+            }
+          },
+          "default": [
+            {
+              "kind": "symbol",
+              "template": "{operationId}"
+            },
+            {
+              "kind": "symbol",
+              "template": "use{OperationId}"
+            }
+          ]
+        },
+        "routeScout.ignoreLines": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "^\\s*import[\\s{*]",
+            "^\\s*export\\s[^;]*\\sfrom\\s"
+          ],
+          "markdownDescription": "Regexes; source lines matching any are skipped so imports don't count as usage."
+        },
+        "routeScout.configFile": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Optional path (relative to the workspace folder) to a JSON config file. When set, it replaces the settings above."
+        },
+        "routeScout.rebuildOnSave": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Rebuild the index automatically when a spec or source file is saved."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "routeScout.findEndpoint",
+        "title": "Route Scout: Find Endpoint / Show Usage",
+        "icon": "$(search)"
+      },
+      {
+        "command": "routeScout.rebuild",
+        "title": "Route Scout: Rebuild Index",
+        "icon": "$(refresh)"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "routeScout",
+          "title": "Route Scout",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "routeScout": [
+        {
+          "id": "routeScout.tree",
+          "name": "Endpoints"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "routeScout.findEndpoint",
+          "when": "view == routeScout.tree",
+          "group": "navigation@1"
+        },
+        {
+          "command": "routeScout.rebuild",
+          "when": "view == routeScout.tree",
+          "group": "navigation@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "routeScout.findEndpoint"
+        },
+        {
+          "command": "routeScout.rebuild"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "node esbuild.mjs --minify",
+    "vscode:prepublish": "node esbuild.mjs --minify",
+    "package": "vsce package --no-dependencies -o route-scout.vsix",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@route-scout/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.7",
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^3.2.1",
+    "esbuild": "^0.24.2",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.0"
+  }
+}

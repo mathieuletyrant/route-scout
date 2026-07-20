@@ -1,0 +1,46 @@
+{
+  "name": "@route-scout/core",
+  "version": "0.1.0",
+  "description": "Config-driven engine that maps OpenAPI operations to their usage sites in a codebase.",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mathieuletyrant/route-scout.git",
+    "directory": "packages/core"
+  },
+  "keywords": [
+    "openapi",
+    "swagger",
+    "usage",
+    "call-sites",
+    "dead-code",
+    "endpoints"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "tinyglobby": "^0.2.10",
+    "yaml": "^2.6.1"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.0"
+  }
+}
