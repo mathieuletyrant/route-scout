@@ -71,11 +71,16 @@
         { "kind": "symbol", "template": "use{OperationId}" }
       ]
     },
+    "ignoreImports": {
+      "type": "boolean",
+      "description": "Mask import / export-from statements (multi-line aware) before matching, so a symbol that only appears in an import never counts as usage.",
+      "default": true
+    },
     "ignoreLines": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Regexes; source lines matching any are skipped before matching (so imports don't count as usage).",
-      "default": ["^\\s*import[\\s{*]", "^\\s*export\\s[^;]*\\sfrom\\s"]
+      "description": "Extra escape hatch: source lines matching any of these regexes are skipped. Imports are handled by ignoreImports.",
+      "default": []
     }
   }
 }

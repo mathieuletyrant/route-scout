@@ -15,6 +15,31 @@ const preview = (line: string): string => {
   return trimmed.length > MAX_PREVIEW ? `${trimmed.slice(0, MAX_PREVIEW)}…` : trimmed;
 };
 
+// `import … from '…'` / `export … from '…'` (incl. multi-line), and side-effect
+// `import '…'`. `[^;]` spans newlines but stops at a statement boundary so a
+// from-less line can't swallow the next statement.
+const IMPORT_PATTERNS = [
+  /(^|\n)([ \t]*(?:import|export)\b[^;]*?\bfrom\b[ \t]*['"][^'"\n]*['"][ \t]*;?)/g,
+  /(^|\n)([ \t]*import[ \t]+['"][^'"\n]*['"][ \t]*;?)/g,
+];
+
+const blankNonNewline = (text: string): string => text.replace(/[^\n]/g, ' ');
+
+/**
+ * Blank out import / re-export statements while preserving line and column
+ * positions, so identifiers that only appear in an import don't count as usage.
+ */
+export function maskImports(content: string): string {
+  let masked = content;
+  for (const pattern of IMPORT_PATTERNS) {
+    masked = masked.replace(
+      pattern,
+      (_match, lead: string, body: string) => lead + blankNonNewline(body),
+    );
+  }
+  return masked;
+}
+
 /**
  * Scan a single file's content and yield every matcher hit.
  *
@@ -27,15 +52,18 @@ export function scanContent(
   content: string,
   matchers: CompiledMatchers,
   ignoreLines: RegExp[] = [],
+  previewContent: string = content,
 ): Hit[] {
   const hits: Hit[] = [];
   const lines = content.split(/\r?\n/);
+  const previewLines = previewContent.split(/\r?\n/);
   const hasSymbols = matchers.symbols.size > 0;
   const hasRegexes = matchers.regexes.length > 0;
 
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i]!;
     const lineNumber = i + 1;
+    const previewLine = previewLines[i] ?? line;
 
     if (ignoreLines.some((re) => re.test(line))) continue;
 
@@ -51,7 +79,7 @@ export function scanContent(
               file: relFile,
               line: lineNumber,
               column: token.index + 1,
-              preview: preview(line),
+              preview: preview(previewLine),
               matcher: ref.template,
             },
           });
@@ -74,7 +102,7 @@ export function scanContent(
               file: relFile,
               line: lineNumber,
               column: match.index + 1,
-              preview: preview(line),
+              preview: preview(previewLine),
               matcher: matcher.template,
             },
           });

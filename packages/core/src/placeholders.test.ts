@@ -7,6 +7,7 @@ const op = (overrides: Partial<Operation> = {}): Operation => ({
   specFile: 'api.json',
   method: 'get',
   path: '/users/{id}',
+  specTitle: null,
   operationId: 'getUserById',
   summary: null,
   tags: [],

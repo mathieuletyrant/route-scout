@@ -1,7 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { basename, dirname, join, relative } from 'node:path';
 
-import { buildIndex, type EndpointUsage, type RouteScoutConfig } from '@route-scout/core';
+import {
+  buildIndex,
+  type EndpointUsage,
+  type RouteScoutConfig,
+  serverName,
+} from '@route-scout/core';
 import * as vscode from 'vscode';
 
 /** An endpoint together with the workspace-folder root its paths resolve against. */
@@ -12,6 +17,12 @@ interface Scouted {
 
 let state: Scouted[] | null = null;
 let building: Promise<Scouted[]> | null = null;
+
+// Set on activation. `groupState` holds the view's grouping choice as workspace
+// state (a view toggle, not a persisted setting), so changing it never has to
+// write .vscode/settings.json. `refreshViews` re-renders after a state change.
+let groupState: vscode.Memento | undefined;
+let refreshViews: (() => void) | undefined;
 
 const toPosix = (p: string): string => p.split('\\').join('/');
 
@@ -36,6 +47,7 @@ function readConfig(folder: vscode.WorkspaceFolder): RouteScoutConfig {
     sources: cfg.get<string[]>('sources'),
     exclude: cfg.get<string[]>('exclude'),
     usage: cfg.get<RouteScoutConfig['usage']>('usage'),
+    ignoreImports: cfg.get<boolean>('ignoreImports'),
     ignoreLines: cfg.get<string[]>('ignoreLines'),
   };
 }
@@ -93,25 +105,73 @@ function invalidate(): void {
 // Locating an operation inside its spec document
 // ---------------------------------------------------------------------------
 
-function escapeRe(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// Matches `operationId: 'x'` / "operationId": "x" — in an OpenAPI spec
+// (JSON/YAML) and in NestJS `@ApiOperation({ operationId: 'x' })` decorators.
+const OPERATION_ID_LINE = /operationId["']?\s*:\s*["']([\w.\-/]+)["']/;
+
+/** operationId → every scouted endpoint that declares it (api + internal channels). */
+function byOperationId(): Map<string, Scouted[]> {
+  const map = new Map<string, Scouted[]>();
+  for (const scouted of state ?? []) {
+    const id = scouted.endpoint.operation.operationId;
+    if (!id) continue;
+    const list = map.get(id) ?? [];
+    list.push(scouted);
+    map.set(id, list);
+  }
+  return map;
 }
 
-/** Best-effort line (0-based) of an operation within its spec document. */
-function locateOperation(document: vscode.TextDocument, endpoint: EndpointUsage): number | null {
-  const { operationId, path } = endpoint.operation;
-  const byId = operationId
-    ? new RegExp(`operationId["']?\\s*:\\s*["']?${escapeRe(operationId)}\\b`)
-    : null;
-  const byPath = new RegExp(`["']?${escapeRe(path)}["']?\\s*:`);
+/**
+ * The same operationId can exist on several endpoints (e.g. the `api` and
+ * `internal` channels in NestJS). Narrow candidates to the one this document is
+ * really about: an exact spec-file match, else a leading path segment (`api` /
+ * `internal`) that appears as a token in the file path (matching
+ * `*.api.controller.ts` / `*.internal.controller.ts`). Falls back to all.
+ */
+function disambiguate(document: vscode.TextDocument, candidates: Scouted[]): Scouted[] {
+  if (candidates.length <= 1) return candidates;
 
-  let pathLine: number | null = null;
-  for (let line = 0; line < document.lineCount; line += 1) {
-    const text = document.lineAt(line).text;
-    if (byId?.test(text)) return line;
-    if (pathLine === null && byPath.test(text)) pathLine = line;
+  const folder = vscode.workspace.getWorkspaceFolder(document.uri);
+  if (folder) {
+    const rel = toPosix(relative(folder.uri.fsPath, document.uri.fsPath));
+    const inSpec = candidates.filter((s) => s.endpoint.operation.specFile === rel);
+    if (inSpec.length > 0) return inSpec;
   }
-  return pathLine;
+
+  const tokens = new Set(document.uri.fsPath.toLowerCase().split(/[^a-z0-9]+/));
+  const hinted = candidates.filter((s) => {
+    const segment = s.endpoint.operation.path.split('/').find(Boolean);
+    return segment ? tokens.has(segment.toLowerCase()) : false;
+  });
+  return hinted.length > 0 && hinted.length < candidates.length ? hinted : candidates;
+}
+
+const callSiteLocations = (scouted: Scouted): vscode.Location[] =>
+  scouted.endpoint.callSites.map(
+    (site) =>
+      new vscode.Location(
+        vscode.Uri.file(join(scouted.root, site.file)),
+        new vscode.Position(Math.max(0, site.line - 1), Math.max(0, site.column - 1)),
+      ),
+  );
+
+/** Cmd/Ctrl+Click on an `operationId: '…'` line → jump to (or peek) its usages. */
+class UsageDefinitionProvider implements vscode.DefinitionProvider {
+  provideDefinition(
+    document: vscode.TextDocument,
+    position: vscode.Position,
+  ): vscode.Location[] | undefined {
+    if (!state) {
+      void ensureIndex();
+      return undefined;
+    }
+    const id = OPERATION_ID_LINE.exec(document.lineAt(position.line).text)?.[1];
+    if (!id) return undefined;
+    const endpoints = disambiguate(document, byOperationId().get(id) ?? []);
+    const locations = endpoints.flatMap(callSiteLocations);
+    return locations.length > 0 ? locations : undefined;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -132,25 +192,30 @@ class UsageCodeLensProvider implements vscode.CodeLensProvider {
       return [];
     }
 
-    const folder = vscode.workspace.getWorkspaceFolder(document.uri);
-    if (!folder) return [];
-    const root = folder.uri.fsPath;
-    const relPath = toPosix(relative(root, document.uri.fsPath));
-
+    const index = byOperationId();
     const lenses: vscode.CodeLens[] = [];
-    for (const scouted of state) {
-      if (scouted.root !== root || scouted.endpoint.operation.specFile !== relPath) continue;
-      const line = locateOperation(document, scouted.endpoint);
-      if (line === null) continue;
-
-      const count = scouted.endpoint.callSites.length;
-      lenses.push(
-        new vscode.CodeLens(new vscode.Range(line, 0, line, 0), {
-          title: count > 0 ? `⟶ ${count} usage${count === 1 ? '' : 's'}` : '⟶ no usages',
-          command: 'routeScout.showCallSites',
-          arguments: [scouted],
-        }),
-      );
+    for (let line = 0; line < document.lineCount; line += 1) {
+      const id = OPERATION_ID_LINE.exec(document.lineAt(line).text)?.[1];
+      if (!id || !index.has(id)) continue;
+      const endpoints = disambiguate(document, index.get(id) ?? []);
+      const range = new vscode.Range(line, 0, line, 0);
+      // Usually one endpoint per id → a plain "⟶ N usages". When an id stays
+      // ambiguous, one lens per endpoint, labelled by server to tell them apart.
+      const multiple = endpoints.length > 1;
+      for (const scouted of endpoints) {
+        const count = scouted.endpoint.callSites.length;
+        const suffix = count > 0 ? `${count} usage${count === 1 ? '' : 's'}` : 'no usages';
+        const title = multiple
+          ? `⟶ ${serverName(scouted.endpoint.operation)}: ${suffix}`
+          : `⟶ ${suffix}`;
+        lenses.push(
+          new vscode.CodeLens(range, {
+            title,
+            command: 'routeScout.showCallSites',
+            arguments: [scouted],
+          }),
+        );
+      }
     }
     return lenses;
   }
@@ -160,10 +225,69 @@ class UsageCodeLensProvider implements vscode.CodeLensProvider {
 // Tree view
 // ---------------------------------------------------------------------------
 
-type SpecNode = { kind: 'spec'; specFile: string; children: Scouted[] };
+type GroupBy = 'server' | 'tag' | 'method';
+const GROUP_DIMENSIONS: GroupBy[] = ['server', 'tag', 'method'];
+
+// `rest` is the remaining grouping dimensions to apply below this group, which
+// is what makes grouping nest arbitrarily (e.g. server → tag → endpoints).
+type GroupNode = {
+  kind: 'group';
+  label: string;
+  icon: string;
+  scouted: Scouted[];
+  rest: GroupBy[];
+};
 type EndpointNode = { kind: 'endpoint'; scouted: Scouted };
 type CallSiteNode = { kind: 'callsite'; root: string; file: string; line: number; preview: string };
-type Node = SpecNode | EndpointNode | CallSiteNode;
+type Node = GroupNode | EndpointNode | CallSiteNode;
+
+/** The ordered grouping dimensions: workspace-state override, else the setting. */
+function readGroupByDims(): GroupBy[] {
+  const raw =
+    groupState?.get<GroupBy[]>('groupBy') ??
+    vscode.workspace.getConfiguration('routeScout').get<string | string[]>('groupBy');
+  const list = (Array.isArray(raw) ? raw : [raw]).filter((v): v is GroupBy =>
+    GROUP_DIMENSIONS.includes(v as GroupBy),
+  );
+  return list.length > 0 ? list : ['server'];
+}
+
+/** Group labels a scouted endpoint belongs to (an operation can carry several tags). */
+function groupLabelsFor(scouted: Scouted, dim: GroupBy): string[] {
+  const op = scouted.endpoint.operation;
+  if (dim === 'method') return [op.method.toUpperCase()];
+  if (dim === 'tag') return op.tags.length > 0 ? op.tags : ['(untagged)'];
+  return [serverName(op)];
+}
+
+const GROUP_ICON: Record<GroupBy, string> = {
+  server: 'server',
+  tag: 'tag',
+  method: 'symbol-method',
+};
+
+/** Bucket endpoints by the first dimension; the remaining dims nest below each group. */
+function buildGroups(scouted: Scouted[], dims: GroupBy[]): GroupNode[] {
+  const [dim, ...rest] = dims;
+  if (!dim) return [];
+  const byLabel = new Map<string, Scouted[]>();
+  for (const s of scouted) {
+    for (const label of groupLabelsFor(s, dim)) {
+      const list = byLabel.get(label) ?? [];
+      list.push(s);
+      byLabel.set(label, list);
+    }
+  }
+  return [...byLabel.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([label, children]) => ({
+      kind: 'group',
+      label,
+      icon: GROUP_ICON[dim],
+      scouted: children,
+      rest,
+    }));
+}
 
 class EndpointTreeProvider implements vscode.TreeDataProvider<Node> {
   private readonly emitter = new vscode.EventEmitter<void>();
@@ -176,18 +300,12 @@ class EndpointTreeProvider implements vscode.TreeDataProvider<Node> {
   async getChildren(element?: Node): Promise<Node[]> {
     if (!element) {
       const scouted = await ensureIndex();
-      const bySpec = new Map<string, Scouted[]>();
-      for (const s of scouted) {
-        const list = bySpec.get(s.endpoint.operation.specFile) ?? [];
-        list.push(s);
-        bySpec.set(s.endpoint.operation.specFile, list);
-      }
-      return [...bySpec.entries()]
-        .sort((a, b) => a[0].localeCompare(b[0]))
-        .map(([specFile, children]) => ({ kind: 'spec', specFile, children }));
+      return buildGroups(scouted, readGroupByDims());
     }
-    if (element.kind === 'spec') {
-      return element.children.map((scouted) => ({ kind: 'endpoint', scouted }));
+    if (element.kind === 'group') {
+      return element.rest.length > 0
+        ? buildGroups(element.scouted, element.rest)
+        : element.scouted.map((scouted) => ({ kind: 'endpoint', scouted }));
     }
     if (element.kind === 'endpoint') {
       const { root } = element.scouted;
@@ -203,11 +321,11 @@ class EndpointTreeProvider implements vscode.TreeDataProvider<Node> {
   }
 
   getTreeItem(node: Node): vscode.TreeItem {
-    if (node.kind === 'spec') {
-      const used = node.children.filter((s) => s.endpoint.callSites.length > 0).length;
-      const item = new vscode.TreeItem(node.specFile, vscode.TreeItemCollapsibleState.Collapsed);
-      item.description = `${used}/${node.children.length} used`;
-      item.iconPath = new vscode.ThemeIcon('symbol-file');
+    if (node.kind === 'group') {
+      const used = node.scouted.filter((s) => s.endpoint.callSites.length > 0).length;
+      const item = new vscode.TreeItem(node.label, vscode.TreeItemCollapsibleState.Collapsed);
+      item.description = `${used}/${node.scouted.length} used`;
+      item.iconPath = new vscode.ThemeIcon(node.icon);
       return item;
     }
     if (node.kind === 'endpoint') {
@@ -307,10 +425,10 @@ async function findEndpoint(): Promise<void> {
     .map((s) => {
       const { operation, callSites } = s.endpoint;
       return {
-        label: `${operation.method.toUpperCase()} ${operation.path}`,
+        label: `${serverName(operation)}  ${operation.method.toUpperCase()} ${operation.path}`,
         description:
           callSites.length > 0 ? `$(references) ${callSites.length}` : '$(circle-slash) unused',
-        detail: `${operation.specFile}${operation.operationId ? `  ·  ${operation.operationId}` : ''}`,
+        detail: operation.operationId ?? undefined,
         scouted: s,
       };
     });
@@ -324,12 +442,62 @@ async function findEndpoint(): Promise<void> {
   if (picked) await showCallSites(picked.scouted);
 }
 
+const GROUP_PRESETS: Array<{ label: string; dims: GroupBy[] }> = [
+  { label: 'Server', dims: ['server'] },
+  { label: 'Server → Tag', dims: ['server', 'tag'] },
+  { label: 'Server → Method', dims: ['server', 'method'] },
+  { label: 'Tag', dims: ['tag'] },
+  { label: 'Tag → Method', dims: ['tag', 'method'] },
+  { label: 'Method', dims: ['method'] },
+];
+
+async function setGroupBy(): Promise<void> {
+  const current = readGroupByDims().join(' → ');
+  type Item = vscode.QuickPickItem & { dims: GroupBy[] };
+  const items: Item[] = GROUP_PRESETS.map((preset) => ({
+    label: preset.label,
+    description: preset.dims.join(' → '),
+    dims: preset.dims,
+    picked: preset.dims.join(',') === readGroupByDims().join(','),
+  }));
+
+  const picked = await vscode.window.showQuickPick(items, {
+    title: `Route Scout: group endpoints by… (current: ${current})`,
+  });
+  if (!picked) return;
+  await groupState?.update('groupBy', picked.dims);
+  refreshViews?.();
+}
+
 // ---------------------------------------------------------------------------
 // Activation
 // ---------------------------------------------------------------------------
 
+// Settings that change what gets indexed (vs. display-only settings like groupBy).
+const REINDEX_KEYS = [
+  'specs',
+  'sources',
+  'exclude',
+  'usage',
+  'ignoreImports',
+  'ignoreLines',
+  'configFile',
+];
+
 const SPEC_LIKE = /\.(json|jsonc|ya?ml)$/i;
 const SOURCE_LIKE = /\.(ts|tsx|js|jsx|mjs|cjs|vue|svelte)$/i;
+
+// Operations are declared in spec files and referenced by `operationId` in
+// NestJS controllers alike, so CodeLens + Go-to-Definition run on both.
+const PROVIDER_SELECTOR: vscode.DocumentSelector = [
+  { language: 'json' },
+  { language: 'jsonc' },
+  { language: 'yaml' },
+  { language: 'typescript' },
+  { language: 'typescriptreact' },
+  { language: 'javascript' },
+  { language: 'javascriptreact' },
+];
 
 export function activate(context: vscode.ExtensionContext): void {
   const codeLens = new UsageCodeLensProvider();
@@ -339,17 +507,18 @@ export function activate(context: vscode.ExtensionContext): void {
     codeLens.refresh();
     tree.refresh();
   };
+  groupState = context.workspaceState;
+  refreshViews = refreshAll;
 
   context.subscriptions.push(
-    vscode.languages.registerCodeLensProvider(
-      [{ language: 'json' }, { language: 'jsonc' }, { language: 'yaml' }],
-      codeLens,
-    ),
+    vscode.languages.registerCodeLensProvider(PROVIDER_SELECTOR, codeLens),
+    vscode.languages.registerDefinitionProvider(PROVIDER_SELECTOR, new UsageDefinitionProvider()),
     vscode.window.registerTreeDataProvider('routeScout.tree', tree),
     vscode.commands.registerCommand('routeScout.findEndpoint', () => findEndpoint()),
     vscode.commands.registerCommand('routeScout.showCallSites', (scouted: Scouted) =>
       showCallSites(scouted),
     ),
+    vscode.commands.registerCommand('routeScout.setGroupBy', () => setGroupBy()),
     vscode.commands.registerCommand(
       'routeScout.openCallSite',
       (root: string, file: string, line: number) => openCallSite(root, file, line),
@@ -361,10 +530,10 @@ export function activate(context: vscode.ExtensionContext): void {
       void vscode.window.showInformationMessage('Route Scout: index rebuilt.');
     }),
     vscode.workspace.onDidChangeConfiguration((event) => {
-      if (event.affectsConfiguration('routeScout')) {
-        invalidate();
-        refreshAll();
-      }
+      if (!event.affectsConfiguration('routeScout')) return;
+      // Only reindex when a scanning-relevant setting changed; groupBy is display-only.
+      if (REINDEX_KEYS.some((key) => event.affectsConfiguration(`routeScout.${key}`))) invalidate();
+      refreshAll();
     }),
     vscode.workspace.onDidSaveTextDocument((document) => {
       const cfg = vscode.workspace.getConfiguration('routeScout', document.uri);

@@ -1,4 +1,9 @@
-import type { EndpointUsage, HttpMethod, IndexResult } from '@route-scout/core';
+import {
+  type EndpointUsage,
+  type HttpMethod,
+  type IndexResult,
+  serverName,
+} from '@route-scout/core';
 
 import { colors } from './colors.js';
 
@@ -27,7 +32,7 @@ export function renderTable(result: IndexResult, endpoints: EndpointUsage[]): st
   const bySpec = groupBy(endpoints, (e) => e.operation.specFile);
 
   for (const [specFile, group] of bySpec) {
-    lines.push(colors.bold(specFile));
+    lines.push(`${colors.bold(serverName(group[0]!.operation))}${colors.dim(`  ${specFile}`)}`);
     const methodWidth = Math.max(...group.map((e) => e.operation.method.length), 6);
     for (const { operation, callSites } of group) {
       const method = methodColor[operation.method](
@@ -61,7 +66,7 @@ export function renderMarkdown(result: IndexResult, endpoints: EndpointUsage[]):
   );
 
   for (const [specFile, group] of groupBy(used, (e) => e.operation.specFile)) {
-    lines.push(`## ${specFile}`, '');
+    lines.push(`## ${serverName(group[0]!.operation)}`, `\`${specFile}\``, '');
     for (const { operation, callSites } of group) {
       const id = operation.operationId ? ` \`${operation.operationId}\`` : '';
       lines.push(

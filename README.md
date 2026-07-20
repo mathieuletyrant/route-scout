@@ -24,7 +24,7 @@ It's **spec-agnostic and framework-agnostic**. You configure three things:
 ## Quick start
 
 Install the **Route Scout** extension in VSCode and open a spec file — a `⟶ N usages` lens appears
-above every operation.
+above every operation, and Cmd/Ctrl+Click on an operation jumps to its usages.
 
 Prefer the terminal? Build the CLI from this repo (it isn't published to npm):
 
@@ -61,12 +61,50 @@ Defaults target the common case:
 ]
 ```
 
+Imports are masked before matching (multi-line aware, `ignoreImports` — on by default), so bringing a
+symbol into scope never counts as usage.
+
 ### What it does and doesn't do
 
 Route Scout matches by convention, not by type resolution — it's fast, language-agnostic, and honest
 about being a heuristic. `operationId`s are usually distinctive enough that collisions are rare; tune
-the matchers (and `ignoreLines`) to your codebase. It does not follow re-exports or resolve dynamic
-URLs. Operations with no `operationId` can only be matched by `regex`/`{path}` matchers.
+the matchers to your codebase. It does not follow re-exports or resolve dynamic URLs. Operations with
+no `operationId` can only be matched by `regex`/`{path}` matchers.
+
+## Example: Nx monorepo with Orval clients
+
+A real-world `routescout.config.json` for a monorepo whose specs live under `packages/openapi-specs/`
+and whose consumers are React apps (react-query hooks) plus server-to-server callers. The key is
+**excluding the generated client code** so the generated definitions aren't counted as usage — the
+default `{operationId}` / `use{OperationId}` matchers then cover both hooks and `.op(...)` calls:
+
+```json
+{
+  "$schema": "https://raw.githubusercontent.com/mathieuletyrant/route-scout/refs/heads/main/schema.json",
+  "specs": ["packages/openapi-specs/*-openapi.json"],
+  "sources": ["apps/**/src/**/*.{ts,tsx}"],
+  "exclude": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/dist_server/**",
+    "**/dist_react/**",
+    "**/out-tsc/**",
+    "**/.nx/cache/**",
+    "**/__generated__/**",
+    "**/*-client/**",
+    "**/*.schemas.ts",
+    "**/*.msw.ts",
+    "**/*.zod.ts"
+  ],
+  "usage": [
+    { "kind": "symbol", "template": "{operationId}" },
+    { "kind": "symbol", "template": "use{OperationId}" }
+  ]
+}
+```
+
+In the VSCode extension, drop this file at the repo root and set `"routeScout.configFile":
+"routescout.config.json"` in `.vscode/settings.json`. The CLI auto-discovers it.
 
 ## Development
 

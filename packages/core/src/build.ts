@@ -4,7 +4,7 @@ import { glob } from 'tinyglobby';
 
 import { type RouteScoutConfig, resolveConfig } from './config.js';
 import { compileMatchers } from './patterns.js';
-import { scanContent } from './scan.js';
+import { maskImports, scanContent } from './scan.js';
 import { loadOperations } from './specs.js';
 import type { CallSite, EndpointUsage, IndexResult, Operation } from './types.js';
 
@@ -47,7 +47,8 @@ export async function buildIndex(
 
   await mapLimit(sourceFiles, options.concurrency ?? 32, async (relFile) => {
     const content = await readFile(join(root, relFile), 'utf8');
-    for (const hit of scanContent(relFile, content, matchers, ignoreLines)) {
+    const matchContent = resolved.ignoreImports ? maskImports(content) : content;
+    for (const hit of scanContent(relFile, matchContent, matchers, ignoreLines, content)) {
       const list = callSitesByOp.get(hit.op) ?? [];
       list.push(hit.site);
       callSitesByOp.set(hit.op, list);

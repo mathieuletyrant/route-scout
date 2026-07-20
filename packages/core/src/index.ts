@@ -9,7 +9,9 @@ export {
   DEFAULT_USAGE,
   resolveConfig,
 } from './config.js';
+export { serverName } from './naming.js';
 export { escapeRegExp, expandTemplate, pathToRegex, splitWords } from './placeholders.js';
+export { maskImports } from './scan.js';
 export { loadOperations, loadSpec } from './specs.js';
 export type {
   CallSite,

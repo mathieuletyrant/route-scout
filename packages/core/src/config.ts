@@ -39,9 +39,14 @@ export interface RouteScoutConfig {
   /** How endpoints appear in the source. */
   usage?: UsageMatcher[];
   /**
-   * Source lines matching any of these regexes are skipped entirely, so they
-   * never count as call sites. Defaults skip `import`/`export … from` lines —
-   * bringing a symbol into scope isn't using it.
+   * When true (default), `import` / `export … from` / side-effect-import
+   * statements are masked before matching (multi-line aware), so a symbol that
+   * only appears in an import never counts as usage.
+   */
+  ignoreImports?: boolean;
+  /**
+   * Extra escape hatch: source lines matching any of these regexes are skipped
+   * entirely. Empty by default — imports are handled by {@link ignoreImports}.
    */
   ignoreLines?: string[];
 }
@@ -78,7 +83,7 @@ export const DEFAULT_USAGE: UsageMatcher[] = [
   { kind: 'symbol', template: 'use{OperationId}' },
 ];
 
-export const DEFAULT_IGNORE_LINES = ['^\\s*import[\\s{*]', '^\\s*export\\s[^;]*\\sfrom\\s'];
+export const DEFAULT_IGNORE_LINES: string[] = [];
 
 export function resolveConfig(
   config: RouteScoutConfig,
@@ -91,6 +96,7 @@ export function resolveConfig(
     sources: nonEmpty(config.sources) ?? DEFAULT_SOURCES,
     exclude: config.exclude ?? DEFAULT_EXCLUDE,
     usage: nonEmpty(config.usage) ?? DEFAULT_USAGE,
+    ignoreImports: config.ignoreImports ?? true,
     ignoreLines: config.ignoreLines ?? DEFAULT_IGNORE_LINES,
   };
 }

@@ -20,6 +20,8 @@ export interface Operation {
   method: HttpMethod;
   /** Templated path, e.g. `/users/{id}`. */
   path: string;
+  /** `info.title` from the spec document, if any (used as the server display name). */
+  specTitle: string | null;
   /** `operationId` from the spec, or `null` when the spec omits it. */
   operationId: string | null;
   /** `summary` from the spec, if any. */

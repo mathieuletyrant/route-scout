@@ -13,6 +13,7 @@ interface RawOperation {
 }
 
 interface RawSpec {
+  info?: { title?: unknown };
   paths?: Record<string, Record<string, RawOperation> | undefined>;
 }
 
@@ -34,6 +35,7 @@ function asTags(value: unknown): string[] {
 export async function loadSpec(root: string, relFile: string): Promise<Operation[]> {
   const content = await readFile(join(root, relFile), 'utf8');
   const spec = parseDocument(relFile, content);
+  const specTitle = asString(spec.info?.title);
   const operations: Operation[] = [];
 
   for (const [path, methods] of Object.entries(spec.paths ?? {})) {
@@ -45,6 +47,7 @@ export async function loadSpec(root: string, relFile: string): Promise<Operation
         specFile: relFile,
         method: method as HttpMethod,
         path,
+        specTitle,
         operationId: asString(op?.operationId),
         summary: asString(op?.summary),
         tags: asTags(op?.tags),

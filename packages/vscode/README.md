@@ -4,6 +4,8 @@
 
 - **CodeLens** on your spec files: every operation gets a `⟶ N usages` lens. Click it to jump to any
   call site.
+- **Cmd/Ctrl+Click** on an operation (its `operationId` line) → *Go to Definition* jumps straight to the
+  usage, or peeks a list when there are several.
 - **Endpoints view** (activity bar): browse every spec → operation → usage, and spot unused endpoints
   at a glance.
 - **Find Endpoint** command: fuzzy-search across all operations by method, path, spec, or
