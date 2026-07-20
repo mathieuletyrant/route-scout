@@ -1,0 +1,81 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/mathieuletyrant/route-scout/main/schema.json",
+  "title": "Route Scout config",
+  "description": "Configuration for route-scout (routescout.config.json). Shared by the CLI and the VSCode extension.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "URL of this JSON schema (for editor autocompletion)."
+    },
+    "root": {
+      "type": "string",
+      "description": "Base directory all globs resolve against. Defaults to the current working directory (ignored by the VSCode extension, which uses the workspace folder)."
+    },
+    "specs": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Globs selecting the OpenAPI spec files.",
+      "default": [
+        "**/openapi*.{json,yaml,yml}",
+        "**/*.openapi.{json,yaml,yml}",
+        "**/swagger*.{json,yaml,yml}"
+      ]
+    },
+    "sources": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Globs selecting the source files scanned for endpoint usage.",
+      "default": ["**/*.{ts,tsx,js,jsx,mjs,cjs,vue,svelte}"]
+    },
+    "exclude": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Globs excluded from both spec and source discovery.",
+      "default": [
+        "**/node_modules/**",
+        "**/dist/**",
+        "**/build/**",
+        "**/out/**",
+        "**/coverage/**",
+        "**/.git/**"
+      ]
+    },
+    "usage": {
+      "type": "array",
+      "description": "How an endpoint appears in source. Each matcher's `template` is expanded per operation. Placeholders: {operationId}, {OperationId}, {operationId:camel|pascal|kebab|snake|constant}, {method}, {METHOD}, {path}, {pathRegex}.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "template"],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["symbol", "regex"],
+            "description": "'symbol' matches a whole identifier (fast; best for generated clients). 'regex' matches a regular expression against each line."
+          },
+          "template": {
+            "type": "string",
+            "description": "Template expanded per operation with placeholders."
+          },
+          "flags": {
+            "type": "string",
+            "description": "Extra RegExp flags (regex matchers only)."
+          }
+        }
+      },
+      "default": [
+        { "kind": "symbol", "template": "{operationId}" },
+        { "kind": "symbol", "template": "use{OperationId}" }
+      ]
+    },
+    "ignoreLines": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Regexes; source lines matching any are skipped before matching (so imports don't count as usage).",
+      "default": ["^\\s*import[\\s{*]", "^\\s*export\\s[^;]*\\sfrom\\s"]
+    }
+  }
+}
