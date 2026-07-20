@@ -42,10 +42,15 @@ Releases are automated from `main` (`.github/workflows/release.yml`):
 1. Bump `version` in `packages/vscode/package.json`.
 2. Commit and push to `main`.
 
-The workflow detects the new version (no matching `v<version>` tag yet), runs the full build, publishes
-the extension to the VS Marketplace (and Open VSX if configured), then tags the commit `v<version>` and
-creates a GitHub Release with the `.vsix` attached. Ordinary commits that don't change the version are
+The workflow detects the new version (no matching `v<version>` tag yet), runs the full build, packages
+the extension, tags the commit `v<version>` and creates a **GitHub Release with the `.vsix` attached** —
+this needs no tokens, so it works out of the box. Ordinary commits that don't change the version are
 no-ops.
 
-Required repository secrets: `VSCE_PAT` (VS Marketplace); optional `OVSX_TOKEN` (Open VSX). With no
-`VSCE_PAT`, the workflow stays a no-op.
+Store publishing is layered on top and opt-in via repository secrets:
+
+- `VSCE_PAT` → also publish to the VS Marketplace.
+- `OVSX_TOKEN` → also publish to [Open VSX](https://open-vsx.org).
+
+Without either secret, releases still ship via GitHub Releases; users install the `.vsix` by hand
+(Extensions → `···` → *Install from VSIX…*).
