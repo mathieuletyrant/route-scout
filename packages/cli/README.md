@@ -2,12 +2,20 @@
 
 Find where each OpenAPI endpoint is used across your codebase.
 
-> Not published to npm. Build it from this repo:
+Published on npm as [`@route-scout/cli`](https://www.npmjs.com/package/@route-scout/cli) (the command is
+`route-scout`):
+
+```bash
+npx @route-scout/cli --specs 'api/**/*.openapi.json' --sources 'src/**/*.{ts,tsx}'
+# or install it: npm i -g @route-scout/cli   →  route-scout --help
+```
+
+Or build from this repo:
 
 ```bash
 pnpm install && pnpm build
 node packages/cli/dist/cli.js --specs 'api/**/*.openapi.json' --sources 'src/**/*.{ts,tsx}'
-# or, from the workspace: pnpm --filter route-scout exec route-scout …
+# or, from the workspace: pnpm --filter @route-scout/cli exec route-scout …
 ```
 
 ## Examples

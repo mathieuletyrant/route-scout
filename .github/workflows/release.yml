@@ -10,10 +10,12 @@ name: Release
 #   OVSX_TOKEN → also publish to Open VSX
 # Ordinary commits that don't change the version are no-ops.
 #
-# The CLI (`route-scout` on npm) ships on its OWN cadence in a separate job:
-# bump the version in packages/cli/package.json and push. Opt-in via NPM_TOKEN;
-# it publishes only when that version isn't already on npm. Decoupled from the
-# extension release above — either can ship without the other.
+# The CLI (`@route-scout/cli` on npm) ships on its OWN cadence in a separate job
+# via OIDC Trusted Publishing (no stored token): bump the version in
+# packages/cli/package.json and push. It publishes only when that version isn't
+# already on npm. Decoupled from the extension release above — either can ship
+# without the other. First publish is manual (the package must exist before a
+# trusted publisher can be configured); CI takes over after. See CLAUDE.md.
 on:
   push:
     branches: [main]
@@ -114,11 +116,17 @@ jobs:
           fi
           exit $failed
 
-  # Publish the CLI to npm on its own version cadence. Opt-in: no-op unless the
-  # NPM_TOKEN secret is set. Skips when packages/cli/package.json's version is
-  # already on the registry, so ordinary pushes are no-ops.
+  # Publish the CLI (@route-scout/cli) to npm on its own version cadence via
+  # OIDC Trusted Publishing — no stored token. Requires a trusted publisher
+  # configured for the package on npmjs.com (org: this repo owner, repo: this
+  # repo, workflow: release.yml). Skips when the version is already on the
+  # registry, so ordinary pushes are no-ops. The package must exist first: do
+  # the initial publish manually (see CLAUDE.md), then CI takes over.
   publish-npm:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write # mint the OIDC token npm exchanges for publish auth
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -128,9 +136,7 @@ jobs:
           NAME=$(node -p "require('./packages/cli/package.json').name")
           VERSION=$(node -p "require('./packages/cli/package.json').version")
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          if [ -z "${{ secrets.NPM_TOKEN }}" ]; then
-            echo "NPM_TOKEN not set — skipping npm publish." && echo "publish=false" >> "$GITHUB_OUTPUT"
-          elif npm view "$NAME@$VERSION" version >/dev/null 2>&1; then
+          if npm view "$NAME@$VERSION" version >/dev/null 2>&1; then
             echo "$NAME@$VERSION already on npm — skipping." && echo "publish=false" >> "$GITHUB_OUTPUT"
           else
             echo "Publishing $NAME@$VERSION to npm." && echo "publish=true" >> "$GITHUB_OUTPUT"
@@ -159,11 +165,10 @@ jobs:
       - if: steps.check.outputs.publish == 'true'
         run: pnpm build
 
-      # `prepublishOnly` re-bundles the CLI; --no-git-checks skips pnpm's
-      # clean-tree/branch guard (irrelevant in CI).
-      - name: Publish CLI to npm
+      # OIDC: pnpm mints an id-token (via id-token: write) and exchanges it with
+      # npm for short-lived publish auth — no NODE_AUTH_TOKEN. --no-git-checks
+      # skips pnpm's clean-tree/branch guard; `prepublishOnly` re-bundles the CLI.
+      - name: Publish CLI to npm (OIDC trusted publishing)
         if: steps.check.outputs.publish == 'true'
         working-directory: packages/cli
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: pnpm publish --no-git-checks
