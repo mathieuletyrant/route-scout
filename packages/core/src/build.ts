@@ -4,7 +4,7 @@ import { glob } from 'tinyglobby';
 
 import { type RouteScoutConfig, resolveConfig } from './config.js';
 import { compileMatchers } from './patterns.js';
-import { maskImports, scanContent } from './scan.js';
+import { importedSymbols, maskImports, scanContent } from './scan.js';
 import { loadOperations } from './specs.js';
 import type { CallSite, EndpointUsage, IndexResult, Operation } from './types.js';
 
@@ -48,7 +48,11 @@ export async function buildIndex(
   await mapLimit(sourceFiles, options.concurrency ?? 32, async (relFile) => {
     const content = await readFile(join(root, relFile), 'utf8');
     const matchContent = resolved.ignoreImports ? maskImports(content) : content;
-    for (const hit of scanContent(relFile, matchContent, matchers, ignoreLines, content)) {
+    // Parse imports from the original content (before masking) to gate symbols.
+    const allowed = resolved.importAware
+      ? importedSymbols(content, resolved.importFrom)
+      : undefined;
+    for (const hit of scanContent(relFile, matchContent, matchers, ignoreLines, content, allowed)) {
       const list = callSitesByOp.get(hit.op) ?? [];
       list.push(hit.site);
       callSitesByOp.set(hit.op, list);

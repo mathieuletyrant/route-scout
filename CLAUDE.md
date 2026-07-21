@@ -28,6 +28,9 @@ Config-driven, **no AST / no framework coupling**. `buildIndex(config)`:
 3. `scan.ts` — scan source files. `maskImports()` blanks `import` / `export … from` / side-effect
    imports **multi-line aware, preserving line/column positions** (so imported symbols never count as
    usage). `scanContent()` matches against masked content but previews from the original.
+   `importedSymbols()` + `importAware`/`importFrom` config: when on, a **symbol** hit only counts if the
+   identifier was actually imported (optionally from a module whose path contains an `importFrom`
+   substring) — kills collisions like Apollo `const [getDevice] = useGetDeviceLazyQuery()`.
 4. `build.ts` — orchestrates, dedupes call sites per (file,line), returns `IndexResult`.
 5. `naming.ts` — `serverName(op)`: `info.title` else filename with `-openapi`/`swagger` stripped.
 
@@ -50,9 +53,15 @@ Defaults: specs `**/openapi*` etc; sources common JS/TS; `ignoreImports: true`. 
   present as a token in the file path (matches `*.api.controller.ts`). CodeLens is **per-endpoint**
   (never merged) so counts match the tree; if still ambiguous it shows one lens per endpoint labelled by
   server. (Bug we fixed: merging by operationId made the lens show 2 where the endpoint had 1.)
+- **Hover + reverse nav**: hovering a usage (a `use{Op}` hook, an operationId, a client call) in any
+  source file shows the endpoint (method/path/summary/server + usage count) and an **"Open in spec"**
+  command link (`routeScout.openSpec` reveals the operationId line). Backed by a `symbolNav` map
+  (`operationId` + every symbol-matcher expansion → endpoints) rebuilt with the index.
+- **`Route Scout: Initialize Config`** (`routeScout.initConfig`) scaffolds a `routescout.config.json`
+  (detects specs, excludes generated dirs) and offers to set it as `configFile`.
 - Settings: `routeScout.specs`, `.sources`, `.exclude`, `.usage`, `.ignoreImports`, `.ignoreLines`,
-  `.configFile`, `.rebuildOnSave`, `.groupBy`. `routeScout.configFile` (JSON only, = core config, so no
-  `groupBy` there) replaces the individual scanning settings.
+  `.importAware`, `.importFrom`, `.configFile`, `.rebuildOnSave`, `.groupBy`. `routeScout.configFile`
+  (JSON only, = core config, so no `groupBy` there) replaces the individual scanning settings.
 
 ## Commands
 

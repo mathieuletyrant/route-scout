@@ -78,8 +78,11 @@ symbol into scope never counts as usage.
 
 Route Scout matches by convention, not by type resolution — it's fast, language-agnostic, and honest
 about being a heuristic. `operationId`s are usually distinctive enough that collisions are rare; tune
-the matchers to your codebase. It does not follow re-exports or resolve dynamic URLs. Operations with
-no `operationId` can only be matched by `regex`/`{path}` matchers.
+the matchers to your codebase. When a name still collides with something unrelated (e.g. an Apollo
+`const [getDevice] = useGetDeviceLazyQuery()`), enable **`importAware`** to only count identifiers that
+were actually imported (optionally restricted to your generated-client modules via `importFrom`). It
+does not follow re-exports or resolve dynamic URLs. Operations with no `operationId` can only be matched
+by `regex`/`{path}` matchers.
 
 ## Example: Nx monorepo with Orval clients
 

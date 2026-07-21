@@ -40,6 +40,44 @@ export function maskImports(content: string): string {
   return masked;
 }
 
+const IMPORT_FROM = /(?:^|\n)[ \t]*import\s+([^;]*?)\bfrom\b\s*['"]([^'"\n]+)['"]/g;
+const NAMESPACE = /\*\s*as\s+([A-Za-z_$][\w$]*)/;
+const DEFAULT_IMPORT = /^([A-Za-z_$][\w$]*)\s*(?:,|$)/;
+const NAMED_ALIAS = /\bas\s+([A-Za-z_$][\w$]*)/;
+const LEADING_IDENT = /^([A-Za-z_$][\w$]*)/;
+
+/**
+ * Local identifiers brought into `content` by `import … from` statements. When
+ * `sourceFilters` is non-empty, only imports whose module path contains one of
+ * the substrings are included. Type-only specifiers are skipped. Used by
+ * import-aware matching.
+ */
+export function importedSymbols(content: string, sourceFilters: string[] = []): Set<string> {
+  const names = new Set<string>();
+  IMPORT_FROM.lastIndex = 0;
+  for (let m = IMPORT_FROM.exec(content); m !== null; m = IMPORT_FROM.exec(content)) {
+    const source = m[2] ?? '';
+    if (sourceFilters.length > 0 && !sourceFilters.some((f) => source.includes(f))) continue;
+
+    const body = (m[1] ?? '').replace(/^\s*type\s+/, '').trim();
+    names.add(NAMESPACE.exec(body)?.[1] ?? '');
+    if (!body.startsWith('{') && !body.startsWith('*')) {
+      names.add(DEFAULT_IMPORT.exec(body)?.[1] ?? '');
+    }
+
+    const braces = /\{([^}]*)\}/.exec(body);
+    if (braces?.[1]) {
+      for (const raw of braces[1].split(',')) {
+        const part = raw.trim();
+        if (!part || /^type\s/.test(part)) continue;
+        names.add(NAMED_ALIAS.exec(part)?.[1] ?? LEADING_IDENT.exec(part)?.[1] ?? '');
+      }
+    }
+  }
+  names.delete('');
+  return names;
+}
+
 /**
  * Scan a single file's content and yield every matcher hit.
  *
@@ -53,6 +91,7 @@ export function scanContent(
   matchers: CompiledMatchers,
   ignoreLines: RegExp[] = [],
   previewContent: string = content,
+  allowedSymbols?: Set<string>,
 ): Hit[] {
   const hits: Hit[] = [];
   const lines = content.split(/\r?\n/);
@@ -73,6 +112,7 @@ export function scanContent(
       for (let token = IDENTIFIER.exec(line); token !== null; token = IDENTIFIER.exec(line)) {
         const refs = matchers.symbols.get(token[0]);
         if (!refs) continue;
+        if (allowedSymbols && !allowedSymbols.has(token[0])) continue;
         for (const ref of refs) {
           hits.push({
             op: ref.op,

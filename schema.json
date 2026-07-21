@@ -81,6 +81,17 @@
       "items": { "type": "string" },
       "description": "Extra escape hatch: source lines matching any of these regexes are skipped. Imports are handled by ignoreImports.",
       "default": []
+    },
+    "importAware": {
+      "type": "boolean",
+      "description": "Only count a `symbol` match if the identifier was actually imported into the file. Kills false positives from locally-defined / destructured names that share an operationId.",
+      "default": false
+    },
+    "importFrom": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "With importAware, only count imports whose module path contains one of these substrings (e.g. [\"generated\", \"-client\"]). Empty means any source.",
+      "default": []
     }
   }
 }

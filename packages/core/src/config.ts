@@ -49,6 +49,20 @@ export interface RouteScoutConfig {
    * entirely. Empty by default — imports are handled by {@link ignoreImports}.
    */
   ignoreLines?: string[];
+  /**
+   * When true, a `symbol` match only counts if that identifier was actually
+   * imported into the file. Kills false positives from locally-defined or
+   * destructured names that happen to share an operationId (e.g. an Apollo
+   * `const [getDevice] = useGetDeviceLazyQuery()`). Off by default.
+   * (Only affects `symbol` matchers; `regex` matchers are unaffected.)
+   */
+  importAware?: boolean;
+  /**
+   * With {@link importAware}, restrict counted imports to modules whose path
+   * contains one of these substrings (e.g. `["generated", "-client"]`). Empty
+   * means any import source qualifies.
+   */
+  importFrom?: string[];
 }
 
 /** Config with every field filled in. */
@@ -98,6 +112,8 @@ export function resolveConfig(
     usage: nonEmpty(config.usage) ?? DEFAULT_USAGE,
     ignoreImports: config.ignoreImports ?? true,
     ignoreLines: config.ignoreLines ?? DEFAULT_IGNORE_LINES,
+    importAware: config.importAware ?? false,
+    importFrom: config.importFrom ?? [],
   };
 }
 

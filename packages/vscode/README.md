@@ -2,14 +2,16 @@
 
 **Find where each OpenAPI endpoint is used, right inside your editor.**
 
-- **CodeLens** on your spec files: every operation gets a `⟶ N usages` lens. Click it to jump to any
-  call site.
+- **CodeLens** on specs *and* NestJS `@ApiOperation` decorators: every operation gets a `⟶ N usages`
+  lens. Click it to jump to any call site.
 - **Cmd/Ctrl+Click** on an operation (its `operationId` line) → *Go to Definition* jumps straight to the
   usage, or peeks a list when there are several.
-- **Endpoints view** (activity bar): browse every spec → operation → usage, and spot unused endpoints
-  at a glance.
-- **Find Endpoint** command: fuzzy-search across all operations by method, path, spec, or
-  `operationId`, then jump to a usage.
+- **Hover** on a usage in your code (a `use…` hook, a client call) → see the endpoint (method, path,
+  summary, server, usage count) and an **"Open in spec"** link — reverse navigation, code → spec.
+- **Endpoints view** (bottom panel): browse every spec → operation → usage, grouped by server / tag /
+  method (nestable), and spot unused endpoints at a glance.
+- **Find Endpoint** command: fuzzy-search across all operations, then jump to a usage.
+- **Initialize Config** command: scaffold a `routescout.config.json` for your repo.
 
 Route Scout is spec-agnostic and framework-agnostic — you tell it which specs, which sources, and how a
 usage looks.
@@ -24,9 +26,13 @@ All settings live under `routeScout.*` and are per-workspace-folder.
 | `routeScout.sources`   | Globs selecting the source files scanned for usage.                          |
 | `routeScout.exclude`   | Globs excluded from discovery.                                               |
 | `routeScout.usage`     | **How an endpoint appears in code** — a list of matchers (see below).        |
-| `routeScout.ignoreLines` | Regexes for lines to skip (defaults skip `import` lines).                   |
+| `routeScout.ignoreImports` | Mask `import` / `export … from` before matching (default `true`).        |
+| `routeScout.importAware` | Only count a symbol match if the identifier was actually imported — kills collisions like Apollo `const [getDevice] = useGetDeviceLazyQuery()` (default `false`). |
+| `routeScout.importFrom` | With `importAware`, restrict to imports whose module path contains one of these substrings. |
+| `routeScout.ignoreLines` | Regexes for extra lines to skip.                                          |
 | `routeScout.configFile`  | Path to a JSON config file that replaces the settings above.               |
 | `routeScout.rebuildOnSave` | Re-index when a spec/source file is saved (default `true`).              |
+| `routeScout.groupBy`   | Ordered grouping dimensions for the view (`server` / `tag` / `method`).      |
 
 ### Usage matchers
 

@@ -2,7 +2,7 @@
   "name": "route-scout-vscode",
   "displayName": "Route Scout",
   "description": "Find where each OpenAPI endpoint is used — CodeLens, tree view, and quick search over your specs.",
-  "version": "0.3.3",
+  "version": "0.4.0",
   "publisher": "MathieuLeTyrant",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -128,6 +128,19 @@
           "default": [],
           "markdownDescription": "Extra escape hatch: source lines matching any of these regexes are skipped. Imports are already handled by `#routeScout.ignoreImports#`."
         },
+        "routeScout.importAware": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Only count a `symbol` match if that identifier was actually imported into the file. Kills false positives from locally-defined / destructured names sharing an operationId (e.g. Apollo `const [getDevice] = useGetDeviceLazyQuery()`)."
+        },
+        "routeScout.importFrom": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "markdownDescription": "With `#routeScout.importAware#`, only count imports whose module path contains one of these substrings (e.g. `[\"generated\", \"-client\"]`). Empty = any import source."
+        },
         "routeScout.configFile": {
           "type": "string",
           "default": "",
@@ -170,6 +183,10 @@
         "command": "routeScout.setGroupBy",
         "title": "Route Scout: Group By…",
         "icon": "$(list-tree)"
+      },
+      {
+        "command": "routeScout.initConfig",
+        "title": "Route Scout: Initialize Config"
       },
       {
         "command": "routeScout.rebuild",
@@ -218,6 +235,9 @@
         },
         {
           "command": "routeScout.setGroupBy"
+        },
+        {
+          "command": "routeScout.initConfig"
         },
         {
           "command": "routeScout.rebuild"

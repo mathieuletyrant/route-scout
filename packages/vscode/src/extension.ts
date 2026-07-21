@@ -1,10 +1,16 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { basename, dirname, join, relative } from 'node:path';
 
 import {
   buildIndex,
+  DEFAULT_EXCLUDE,
+  DEFAULT_SOURCES,
+  DEFAULT_SPECS,
+  DEFAULT_USAGE,
   type EndpointUsage,
+  expandTemplate,
   type RouteScoutConfig,
+  resolveConfig,
   serverName,
 } from '@route-scout/core';
 import * as vscode from 'vscode';
@@ -24,7 +30,18 @@ let building: Promise<Scouted[]> | null = null;
 let groupState: vscode.Memento | undefined;
 let refreshViews: (() => void) | undefined;
 
+// symbol (matcher expansion) or operationId → endpoints, for hover + reverse
+// navigation from a call site back to its spec. Rebuilt with the index.
+let symbolNav: Map<string, Scouted[]> | null = null;
+
 const toPosix = (p: string): string => p.split('\\').join('/');
+
+function addNav(nav: Map<string, Scouted[]>, key: string | null, scouted: Scouted): void {
+  if (!key) return;
+  const list = nav.get(key) ?? [];
+  if (!list.includes(scouted)) list.push(scouted);
+  nav.set(key, list);
+}
 
 // ---------------------------------------------------------------------------
 // Config
@@ -49,6 +66,8 @@ function readConfig(folder: vscode.WorkspaceFolder): RouteScoutConfig {
     usage: cfg.get<RouteScoutConfig['usage']>('usage'),
     ignoreImports: cfg.get<boolean>('ignoreImports'),
     ignoreLines: cfg.get<string[]>('ignoreLines'),
+    importAware: cfg.get<boolean>('importAware'),
+    importFrom: cfg.get<string[]>('importFrom'),
   };
 }
 
@@ -59,6 +78,7 @@ function readConfig(folder: vscode.WorkspaceFolder): RouteScoutConfig {
 async function buildAll(): Promise<Scouted[]> {
   const folders = vscode.workspace.workspaceFolders ?? [];
   const scouted: Scouted[] = [];
+  const nav = new Map<string, Scouted[]>();
 
   await vscode.window.withProgress(
     { location: vscode.ProgressLocation.Window, title: 'Route Scout: indexing endpoints…' },
@@ -66,9 +86,18 @@ async function buildAll(): Promise<Scouted[]> {
       for (const folder of folders) {
         try {
           const config = readConfig(folder);
+          const symbolTemplates = resolveConfig(config)
+            .usage.filter((m) => m.kind === 'symbol')
+            .map((m) => m.template);
           const result = await buildIndex(config);
           for (const endpoint of result.endpoints) {
-            scouted.push({ root: result.root, endpoint });
+            const item: Scouted = { root: result.root, endpoint };
+            scouted.push(item);
+            // Reverse-nav keys: the operationId and every symbol-matcher expansion.
+            addNav(nav, endpoint.operation.operationId, item);
+            for (const template of symbolTemplates) {
+              addNav(nav, expandTemplate(template, endpoint.operation, 'literal'), item);
+            }
           }
         } catch (error) {
           void vscode.window.showErrorMessage(
@@ -79,6 +108,7 @@ async function buildAll(): Promise<Scouted[]> {
     },
   );
 
+  symbolNav = nav;
   return scouted;
 }
 
@@ -99,6 +129,7 @@ function ensureIndex(): Promise<Scouted[]> {
 function invalidate(): void {
   state = null;
   building = null;
+  symbolNav = null;
 }
 
 // ---------------------------------------------------------------------------
@@ -178,6 +209,37 @@ class UsageDefinitionProvider implements vscode.DefinitionProvider {
     const endpoints = disambiguate(document, byOperationId().get(id) ?? []);
     const locations = endpoints.flatMap(callSiteLocations);
     return locations.length > 0 ? locations : undefined;
+  }
+}
+
+/** Hover on a usage (a hook / operationId / client call) → endpoint + link to its spec. */
+class EndpointHoverProvider implements vscode.HoverProvider {
+  provideHover(document: vscode.TextDocument, position: vscode.Position): vscode.Hover | undefined {
+    if (!symbolNav) {
+      void ensureIndex();
+      return undefined;
+    }
+    const range = document.getWordRangeAtPosition(position);
+    if (!range) return undefined;
+    const matches = symbolNav.get(document.getText(range));
+    if (!matches || matches.length === 0) return undefined;
+
+    const md = new vscode.MarkdownString();
+    md.isTrusted = true;
+    md.supportThemeIcons = true;
+    matches.forEach(({ endpoint, root }, i) => {
+      const op = endpoint.operation;
+      const count = endpoint.callSites.length;
+      if (i > 0) md.appendMarkdown('\n\n---\n\n');
+      md.appendMarkdown(`**${op.method.toUpperCase()}** \`${op.path}\` — _${serverName(op)}_\n\n`);
+      if (op.summary) md.appendMarkdown(`${op.summary}\n\n`);
+      md.appendMarkdown(`$(references) ${count} usage${count === 1 ? '' : 's'}`);
+      if (op.operationId) {
+        const args = encodeURIComponent(JSON.stringify([root, op.specFile, op.operationId]));
+        md.appendMarkdown(`  ·  [$(go-to-file) Open in spec](command:routeScout.openSpec?${args})`);
+      }
+    });
+    return new vscode.Hover(md, range);
   }
 }
 
@@ -385,6 +447,22 @@ async function openCallSite(root: string, file: string, line: number): Promise<v
   editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
 }
 
+/** Reverse navigation: open the spec and reveal the operation's `operationId` line. */
+async function openSpec(root: string, specFile: string, operationId: string): Promise<void> {
+  const document = await vscode.workspace.openTextDocument(vscode.Uri.file(join(root, specFile)));
+  let line = 0;
+  for (let i = 0; i < document.lineCount; i += 1) {
+    if (OPERATION_ID_LINE.exec(document.lineAt(i).text)?.[1] === operationId) {
+      line = i;
+      break;
+    }
+  }
+  const editor = await vscode.window.showTextDocument(document);
+  const position = new vscode.Position(line, 0);
+  editor.selection = new vscode.Selection(position, position);
+  editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
+}
+
 async function showCallSites(scouted: Scouted): Promise<void> {
   const { endpoint, root } = scouted;
   if (endpoint.callSites.length === 0) {
@@ -476,6 +554,59 @@ async function setGroupBy(): Promise<void> {
   refreshViews?.();
 }
 
+/** Scaffold a `routescout.config.json` at the workspace root and open it. */
+async function initConfig(): Promise<void> {
+  const folder = vscode.workspace.workspaceFolders?.[0];
+  if (!folder) {
+    void vscode.window.showErrorMessage('Route Scout: open a folder first.');
+    return;
+  }
+  const target = vscode.Uri.file(join(folder.uri.fsPath, 'routescout.config.json'));
+  if (existsSync(target.fsPath)) {
+    void vscode.window.showInformationMessage('routescout.config.json already exists.');
+    await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(target));
+    return;
+  }
+
+  const found = await vscode.workspace.findFiles(
+    new vscode.RelativePattern(folder, '**/*{openapi,swagger}*.{json,yaml,yml}'),
+    '**/node_modules/**',
+    20,
+  );
+  const config = {
+    $schema:
+      'https://raw.githubusercontent.com/mathieuletyrant/route-scout/refs/heads/main/schema.json',
+    specs: DEFAULT_SPECS,
+    sources: DEFAULT_SOURCES,
+    exclude: [...DEFAULT_EXCLUDE, '**/__generated__/**', '**/*-client/**', '**/*.generated.ts'],
+    usage: DEFAULT_USAGE,
+  };
+  await vscode.workspace.fs.writeFile(
+    target,
+    Buffer.from(`${JSON.stringify(config, null, 2)}\n`, 'utf8'),
+  );
+  await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(target));
+
+  const message =
+    found.length > 0
+      ? `Created routescout.config.json — found ${found.length} spec file(s).`
+      : 'Created routescout.config.json — no specs detected yet, adjust `specs`.';
+  const pick = await vscode.window.showInformationMessage(message, 'Use as config file');
+  if (pick === 'Use as config file') {
+    try {
+      await vscode.workspace
+        .getConfiguration('routeScout', folder.uri)
+        .update('configFile', 'routescout.config.json', vscode.ConfigurationTarget.WorkspaceFolder);
+      invalidate();
+      refreshViews?.();
+    } catch (error) {
+      void vscode.window.showWarningMessage(
+        `Route Scout: set "routeScout.configFile" manually — ${error instanceof Error ? error.message : error}`,
+      );
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Activation
 // ---------------------------------------------------------------------------
@@ -488,6 +619,8 @@ const REINDEX_KEYS = [
   'usage',
   'ignoreImports',
   'ignoreLines',
+  'importAware',
+  'importFrom',
   'configFile',
 ];
 
@@ -520,15 +653,22 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.languages.registerCodeLensProvider(PROVIDER_SELECTOR, codeLens),
     vscode.languages.registerDefinitionProvider(PROVIDER_SELECTOR, new UsageDefinitionProvider()),
+    vscode.languages.registerHoverProvider(PROVIDER_SELECTOR, new EndpointHoverProvider()),
     vscode.window.registerTreeDataProvider('routeScout.tree', tree),
     vscode.commands.registerCommand('routeScout.findEndpoint', () => findEndpoint()),
     vscode.commands.registerCommand('routeScout.showCallSites', (scouted: Scouted) =>
       showCallSites(scouted),
     ),
     vscode.commands.registerCommand('routeScout.setGroupBy', () => setGroupBy()),
+    vscode.commands.registerCommand('routeScout.initConfig', () => initConfig()),
     vscode.commands.registerCommand(
       'routeScout.openCallSite',
       (root: string, file: string, line: number) => openCallSite(root, file, line),
+    ),
+    vscode.commands.registerCommand(
+      'routeScout.openSpec',
+      (root: string, specFile: string, operationId: string) =>
+        openSpec(root, specFile, operationId),
     ),
     vscode.commands.registerCommand('routeScout.rebuild', async () => {
       invalidate();
