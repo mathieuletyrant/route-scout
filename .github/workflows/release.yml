@@ -79,15 +79,32 @@ jobs:
           gh release create "v$VERSION" packages/vscode/route-scout.vsix \
             --title "v$VERSION" --generate-notes
 
+      # Both stores attempt independently (continue-on-error, so one failing
+      # doesn't skip the other and never rolls back the GitHub Release above).
+      # The final step then surfaces any failure by failing the run.
       - name: Publish to VS Marketplace
+        id: vsce
         if: ${{ steps.check.outputs.release == 'true' && env.VSCE_PAT != '' }}
         continue-on-error: true
         working-directory: packages/vscode
         run: pnpm exec vsce publish --packagePath route-scout.vsix
 
       - name: Publish to Open VSX
+        id: ovsx
         if: ${{ steps.check.outputs.release == 'true' && env.OVSX_TOKEN != '' }}
         continue-on-error: true
         run: |
           pnpm dlx ovsx create-namespace MathieuLeTyrant -p "$OVSX_TOKEN" || true
           pnpm dlx ovsx publish packages/vscode/route-scout.vsix -p "$OVSX_TOKEN"
+
+      - name: Fail if a store publish failed
+        if: steps.check.outputs.release == 'true'
+        run: |
+          failed=0
+          if [ "${{ steps.vsce.outcome }}" = "failure" ]; then
+            echo "::error::VS Marketplace publish failed" && failed=1
+          fi
+          if [ "${{ steps.ovsx.outcome }}" = "failure" ]; then
+            echo "::error::Open VSX publish failed" && failed=1
+          fi
+          exit $failed
