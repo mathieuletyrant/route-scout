@@ -22,7 +22,7 @@ It's **spec-agnostic and framework-agnostic**. You configure three things:
 | Package                                        | What it is                                              |
 | ---------------------------------------------- | ------------------------------------------------------- |
 | [`@route-scout/core`](packages/core)           | The engine: spec parsing + usage matching. No coupling. |
-| [`route-scout`](packages/cli)                  | CLI — reports, `--unused-only`, JSON/Markdown for CI.   |
+| [`route-scout-cli`](packages/cli)              | CLI — reports, `--unused-only`, JSON/Markdown for CI.   |
 | [`route-scout-vscode`](packages/vscode)        | VSCode extension — CodeLens, tree view, quick search.   |
 
 ## Quick start
@@ -36,16 +36,20 @@ It's **spec-agnostic and framework-agnostic**. You configure three things:
 Then open a spec file — a `⟶ N usages` lens appears above every operation, and Cmd/Ctrl+Click on an
 operation jumps to its usages.
 
-Prefer the terminal? Build the CLI from this repo (it isn't published to npm):
+Prefer the terminal? The CLI ships on npm as
+[`route-scout-cli`](https://www.npmjs.com/package/route-scout-cli) (the command it installs is
+`route-scout`):
 
 ```bash
-pnpm install && pnpm build
-
 # zero config (auto-discovers specs + scans common sources)
-node packages/cli/dist/cli.js
+npx route-scout-cli
 
 # which endpoints are never called?
-node packages/cli/dist/cli.js --unused-only
+npx route-scout-cli --unused-only
+
+# or install it once, then use the `route-scout` command:
+npm i -g route-scout-cli
+route-scout --unused-only
 ```
 
 ## How matching works
