@@ -108,28 +108,28 @@ builds, packages, tags `v<version>`, and creates a **GitHub Release with the `.v
 needed**. Store publishing is opt-in via secrets: `VSCE_PAT` (VS Marketplace), `OVSX_TOKEN` (Open VSX).
 Same version = no-op.
 
-The **CLI (`@route-scout/cli`) ships to npm on its own cadence** via a separate `publish-npm` job in the
+The **CLI (`route-scout-cli`) ships to npm on its own cadence** via a separate `publish-npm` job in the
 same workflow, using **OIDC Trusted Publishing** (no stored token — the job has `id-token: write` and
 pnpm exchanges a minted OIDC token for short-lived publish auth). Bump `packages/cli/package.json` version
 and push; it publishes only when that version isn't already on the registry. Decoupled from the extension
 release — either can ship independently.
 
 **First publish is manual** (npm requires the package to exist before a trusted publisher can be
-configured on npmjs.com). One-time setup:
-1. Create the npm **org `route-scout`** (for the `@route-scout/*` scope), public.
-2. From repo root: `pnpm build`, then `pnpm --filter @route-scout/cli publish --access public` in a real
-   terminal (interactive 2FA/OTP — use pnpm, not `npm publish`, so `workspace:*` devDeps get rewritten).
-3. On npmjs.com → the package's **Trusted Publisher** settings, add GitHub Actions: org
+configured on npmjs.com). One-time setup (published under the `mathieuletyrant` account, unscoped — no
+org needed):
+1. From repo root: `pnpm build`, then `pnpm --filter route-scout-cli publish` in a real terminal
+   (interactive 2FA/OTP — use pnpm, not `npm publish`, so `workspace:*` devDeps get rewritten).
+2. On npmjs.com → the package's **Trusted Publisher** settings, add GitHub Actions: org
    `mathieuletyrant`, repo `route-scout`, workflow filename `release.yml`, allowed action `npm publish`.
    After that, every version bump publishes from CI with no token. `schema.json` (config JSON Schema) is served from
 `raw.githubusercontent.com/…/refs/heads/main/schema.json` (use the `refs/heads/main` form).
 
 ## Publishing status / decisions
 
-- **CLI published to npm** as `@route-scout/cli` (self-contained esbuild bundle; the `bin` command stays
+- **CLI published to npm** as `route-scout-cli` (self-contained esbuild bundle; the `bin` command stays
   `route-scout`). The unscoped name `route-scout` was already taken on npm by an unrelated package, hence
-  the scope. Core stays private (`@route-scout/core`, `"private": true`) — bundled into the CLI, never
-  published on its own.
+  the `-cli` suffix. Core stays private (`@route-scout/core`, `"private": true`) — bundled into the CLI,
+  never published on its own.
 - Extension `publisher: "MathieuLeTyrant"`. VS Marketplace needs an Azure DevOps PAT (`VSCE_PAT`) — the
   user hit repeated Azure DevOps signup blockers, so the GitHub-Release `.vsix` path is the working
   fallback; Open VSX (GitHub login, no Azure) is the recommended real-store alternative.

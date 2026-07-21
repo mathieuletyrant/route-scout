@@ -10,7 +10,7 @@ name: Release
 #   OVSX_TOKEN → also publish to Open VSX
 # Ordinary commits that don't change the version are no-ops.
 #
-# The CLI (`@route-scout/cli` on npm) ships on its OWN cadence in a separate job
+# The CLI (`route-scout-cli` on npm) ships on its OWN cadence in a separate job
 # via OIDC Trusted Publishing (no stored token): bump the version in
 # packages/cli/package.json and push. It publishes only when that version isn't
 # already on npm. Decoupled from the extension release above — either can ship
@@ -116,7 +116,7 @@ jobs:
           fi
           exit $failed
 
-  # Publish the CLI (@route-scout/cli) to npm on its own version cadence via
+  # Publish the CLI (route-scout-cli) to npm on its own version cadence via
   # OIDC Trusted Publishing — no stored token. Requires a trusted publisher
   # configured for the package on npmjs.com (org: this repo owner, repo: this
   # repo, workflow: release.yml). Skips when the version is already on the

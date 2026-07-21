@@ -1,5 +1,5 @@
 {
-  "name": "@route-scout/cli",
+  "name": "route-scout-cli",
   "version": "0.1.0",
   "description": "Find where each OpenAPI endpoint is used across your codebase.",
   "license": "MIT",
