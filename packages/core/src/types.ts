@@ -64,5 +64,7 @@ export interface IndexResult {
   /** Absolute path every relative path in this result is resolved against. */
   root: string;
   endpoints: EndpointUsage[];
+  /** The files that were discovered and scanned (relative to `root`, posix). */
+  files: { specs: string[]; sources: string[] };
   stats: IndexStats;
 }

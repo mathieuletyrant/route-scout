@@ -33,6 +33,19 @@ function addNav(nav: Map<string, Scouted[]>, key: string | null, scouted: Scoute
   nav.set(key, list);
 }
 
+/** Count files grouped by their first `depth` path segments, biggest bucket first. */
+function dirBreakdown(files: string[], depth = 2): string {
+  const counts = new Map<string, number>();
+  for (const file of files) {
+    const key = file.split('/').slice(0, depth).join('/') || file;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([dir, n]) => `${dir} (${n})`)
+    .join(', ');
+}
+
 async function buildAll(): Promise<Scouted[]> {
   const folders = vscode.workspace.workspaceFolders ?? [];
   const scouted: Scouted[] = [];
@@ -46,10 +59,16 @@ async function buildAll(): Promise<Scouted[]> {
       for (const folder of folders) {
         try {
           const config = readConfig(folder);
-          log.debug(`[${folder.name}] indexing ${config.root}`);
-          const symbolTemplates = resolveConfig(config)
-            .usage.filter((m) => m.kind === 'symbol')
+          const resolved = resolveConfig(config);
+          const symbolTemplates = resolved.usage
+            .filter((m) => m.kind === 'symbol')
             .map((m) => m.template);
+          log.debug(`[${folder.name}] indexing ${config.root}`);
+          log.debug(`[${folder.name}] specs globs: ${resolved.specs.join(', ')}`);
+          log.debug(
+            `[${folder.name}] sources globs: ${resolved.sources.join(', ')} ` +
+              `| ${resolved.exclude.length} exclude pattern(s)`,
+          );
           const result = await buildIndex(config);
           for (const endpoint of result.endpoints) {
             const item: Scouted = { root: result.root, endpoint };
@@ -60,11 +79,16 @@ async function buildAll(): Promise<Scouted[]> {
               addNav(nav, expandTemplate(template, endpoint.operation, 'literal'), item);
             }
           }
-          const { stats } = result;
+          const { stats, files } = result;
           log.info(
             `[${folder.name}] ${stats.operations} operations in ${stats.specFiles} spec(s), ` +
               `${stats.usedOperations} used across ${stats.sourceFiles} source(s).`,
           );
+          // Where the scanned files live — helps trim `sources`/`exclude` when the
+          // count is high. Full lists at trace level.
+          log.debug(`[${folder.name}] source files by dir: ${dirBreakdown(files.sources)}`);
+          log.trace(`[${folder.name}] spec files:\n  ${files.specs.join('\n  ')}`);
+          log.trace(`[${folder.name}] source files:\n  ${files.sources.join('\n  ')}`);
           await collectDeclarations(folder, config.definitions ?? [], decls);
         } catch (error) {
           log.error(error instanceof Error ? error : String(error));

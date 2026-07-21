@@ -52,9 +52,11 @@ import cycles.
 - **Bundles core** (esbuild, CJS). View lives in the **bottom panel** (viewsContainers.panel).
 - **Logging**: `log.ts` owns a single `LogOutputChannel` ("Route Scout", `{ log: true }` — leveled +
   timestamped, filterable via *Developer: Set Log Level*). `store` logs the indexing lifecycle (per-folder
-  counts, errors with a "Show logs" toast action); `commands.goToEndpoint` logs the **routing decision**
-  (candidates, identity tokens, chosen declaration or "ambiguous, prompting"). `Route Scout: Show Logs`
-  (`routeScout.showLogs`) reveals the channel.
+  counts, resolved specs/sources globs, and a **source-files-by-dir breakdown** to help trim big scans —
+  full file lists at `trace`); `commands.goToEndpoint` logs the **routing decision** (candidates, identity
+  tokens, chosen declaration or "ambiguous, prompting"). `Route Scout: Show Logs` (`routeScout.showLogs`)
+  reveals the channel. The file lists come from `IndexResult.files` (`{ specs, sources }`) which `buildIndex`
+  now returns.
 - CodeLens + Go-to-Definition are keyed on **`operationId: '…'` lines**, registered for JSON/YAML **and
   TS/JS** — so they work in OpenAPI specs *and* in NestJS `@ApiOperation({ operationId })` decorators.
   Cmd/Ctrl+Click on an operationId line → jump/peek its usages. Usages are **merged by operationId**

@@ -69,6 +69,7 @@ export async function buildIndex(
   return {
     root,
     endpoints,
+    files: { specs: specFiles, sources: sourceFiles },
     stats: {
       specFiles: specFiles.length,
       operations: operations.length,
