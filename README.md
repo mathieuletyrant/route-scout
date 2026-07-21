@@ -2,6 +2,10 @@
 
 > Find where each OpenAPI endpoint is used across your codebase.
 
+[![VS Marketplace](https://img.shields.io/visual-studio-marketplace/v/MathieuLeTyrant.route-scout-vscode?label=VS%20Marketplace&color=blue)](https://marketplace.visualstudio.com/items?itemName=MathieuLeTyrant.route-scout-vscode)
+[![Open VSX](https://img.shields.io/open-vsx/v/MathieuLeTyrant/route-scout-vscode?label=Open%20VSX&color=blue)](https://open-vsx.org/extension/MathieuLeTyrant/route-scout-vscode)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
 Route Scout answers one question fast: **"where is this endpoint consumed?"** Point it at your OpenAPI
 specs and your source, and it maps every operation to its call sites — in CI, or right inside VSCode.
 
@@ -23,8 +27,14 @@ It's **spec-agnostic and framework-agnostic**. You configure three things:
 
 ## Quick start
 
-Install the **Route Scout** extension in VSCode and open a spec file — a `⟶ N usages` lens appears
-above every operation, and Cmd/Ctrl+Click on an operation jumps to its usages.
+**Route Scout is available on every store** — install the extension from wherever your editor pulls from:
+
+- **VS Code Marketplace** → [Route Scout](https://marketplace.visualstudio.com/items?itemName=MathieuLeTyrant.route-scout-vscode) (or `code --install-extension MathieuLeTyrant.route-scout-vscode`)
+- **Open VSX** (VSCodium, Cursor, Gitpod, Windsurf…) → [Route Scout](https://open-vsx.org/extension/MathieuLeTyrant/route-scout-vscode)
+- **`.vsix`** from [GitHub Releases](https://github.com/mathieuletyrant/route-scout/releases) → *Extensions → Install from VSIX…*
+
+Then open a spec file — a `⟶ N usages` lens appears above every operation, and Cmd/Ctrl+Click on an
+operation jumps to its usages.
 
 Prefer the terminal? Build the CLI from this repo (it isn't published to npm):
 
