@@ -11,7 +11,9 @@ it at OpenAPI specs + source globs; it maps every operation to its call sites. S
 ## Layout — pnpm workspace, 3 packages
 
 - `packages/core` (`@route-scout/core`) — the engine. Pure, framework-agnostic, unit-tested (Vitest).
-- `packages/cli` (`route-scout`) — CLI over core. Table / JSON / Markdown output, filters.
+- `packages/cli` (`route-scout`) — CLI over core. Table / JSON / Markdown output, filters. **Bundles core
+  via esbuild** (`esbuild.mjs`, ESM output) so the published npm package is self-contained (zero runtime
+  deps); core is a devDependency only.
 - `packages/vscode` (`route-scout-vscode`) — the extension. **Bundles core via esbuild** (self-contained
   `.vsix`).
 
@@ -73,7 +75,7 @@ Defaults: specs `**/openapi*` etc; sources common JS/TS; `ignoreImports: true`. 
 
 ```bash
 pnpm install
-pnpm build            # core → cli (tsc project refs) → vscode (esbuild)
+pnpm build            # core (tsc) → cli (esbuild bundle) → vscode (esbuild bundle)
 pnpm test             # vitest (core)
 pnpm typecheck
 pnpm check            # biome (lint + format check)
@@ -104,12 +106,18 @@ caught a real bundling bug): `scratchpad/vscode-smoke.mjs`.
 Push to `main` with a bumped `packages/vscode/package.json` version → `.github/workflows/release.yml`
 builds, packages, tags `v<version>`, and creates a **GitHub Release with the `.vsix`** — **no token
 needed**. Store publishing is opt-in via secrets: `VSCE_PAT` (VS Marketplace), `OVSX_TOKEN` (Open VSX).
-Same version = no-op. `schema.json` (config JSON Schema) is served from
+Same version = no-op.
+
+The **CLI ships to npm on its own cadence** via a separate `publish-npm` job in the same workflow: bump
+`packages/cli/package.json` version and push. Opt-in via the `NPM_TOKEN` secret (an **Automation** access
+token from npmjs.com); publishes `route-scout` only when that version isn't already on the registry.
+Decoupled from the extension release — either can ship independently. `schema.json` (config JSON Schema) is served from
 `raw.githubusercontent.com/…/refs/heads/main/schema.json` (use the `refs/heads/main` form).
 
 ## Publishing status / decisions
 
-- **Not published to npm** (deliberate). Only the extension is published.
+- **CLI published to npm** as `route-scout` (self-contained esbuild bundle). Core stays private
+  (`@route-scout/core`, `"private": true`) — bundled into the CLI, never published on its own.
 - Extension `publisher: "MathieuLeTyrant"`. VS Marketplace needs an Azure DevOps PAT (`VSCE_PAT`) — the
   user hit repeated Azure DevOps signup blockers, so the GitHub-Release `.vsix` path is the working
   fallback; Open VSX (GitHub login, no Azure) is the recommended real-store alternative.

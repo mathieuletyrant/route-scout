@@ -19,14 +19,16 @@ importers:
         version: 7.0.2
 
   packages/cli:
-    dependencies:
+    devDependencies:
       '@route-scout/core':
         specifier: workspace:*
         version: link:../core
-    devDependencies:
       '@types/node':
         specifier: ^22.10.7
         version: 22.20.1
+      esbuild:
+        specifier: ^0.24.2
+        version: 0.24.2
       typescript:
         specifier: ^7.0.2
         version: 7.0.2
