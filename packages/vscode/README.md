@@ -2,6 +2,8 @@
 
 **Find where each OpenAPI endpoint is used, right inside your editor.**
 
+![Route Scout demo](https://raw.githubusercontent.com/mathieuletyrant/route-scout/main/packages/vscode/media/route-scout-demo.gif)
+
 - **CodeLens** on specs *and* NestJS `@ApiOperation` decorators: every operation gets a `⟶ N usages`
   lens. Click it to jump to any call site.
 - **Cmd/Ctrl+Click** on an operation (its `operationId` line) → *Go to Definition* jumps straight to the
