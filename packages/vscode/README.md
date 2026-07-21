@@ -31,9 +31,8 @@ All settings live under `routeScout.*` and are per-workspace-folder.
 | `routeScout.sources`   | Globs selecting the source files scanned for usage.                          |
 | `routeScout.exclude`   | Globs excluded from discovery.                                               |
 | `routeScout.usage`     | **How an endpoint appears in code** — a list of matchers (see below).        |
+| `routeScout.clients`   | **Generated API clients** — restrict usages to real client calls and attribute them per server (see below). |
 | `routeScout.ignoreImports` | Mask `import` / `export … from` before matching (default `true`).        |
-| `routeScout.importAware` | Only count a symbol match if the identifier was actually imported — kills collisions like Apollo `const [getDevice] = useGetDeviceLazyQuery()` (default `false`). |
-| `routeScout.importFrom` | With `importAware`, restrict to imports whose module path contains one of these substrings. |
 | `routeScout.ignoreLines` | Regexes for extra lines to skip.                                          |
 | `routeScout.definitions` | Globs of files that *declare* operationIds (controllers) — for *Go to Endpoint*. |
 | `routeScout.configFile`  | Path to a JSON config file that replaces the settings above.               |
@@ -60,6 +59,37 @@ Each matcher's `template` is expanded per operation. Placeholders:
 - **`symbol`** matches a whole identifier (fast, precise for generated clients).
 - **`regex`** matches a regular expression against each line; values are auto-escaped, `{pathRegex}`
   turns `{param}` segments into `[^/]+`.
+
+### Generated clients (`clients`)
+
+By default every matcher hit counts as a usage. That's fine until the same `operationId` lives on
+**several endpoints** — two servers, or an `api` + `internal` channel — because a matcher can't tell which
+one a call targets, so both get the same inflated count. And a method named after an operationId (a NestJS
+controller, a local service) gets counted even though it's a *definition*, not a call.
+
+Declaring your **generated API clients** fixes both: a call then counts **only if it goes through a
+declared client**, and it's attributed to that client's spec.
+
+```jsonc
+"routeScout.clients": [
+  // module: import-path substring(s)/glob(s) identifying the client.
+  //   - bare/alias imports are matched against the specifier as written
+  //   - relative imports are matched against the resolved repo path
+  // spec: the spec filename this client talks to.
+  { "spec": "mdm-server-openapi.json", "module": ["mdm-server-client", "providers/mdmServer/__generated__"] },
+  { "spec": "company-server-internal-openapi.json", "module": "providers/companyServer/__generated__" }
+]
+```
+
+- A **symbol** call (an imported hook/function like `useGetThing()` / `getThing()`) counts only when that
+  identifier was imported from a client → attributed to that client's spec.
+- A **property-access** call (`api.getThing(...)`, matched by a `\.{operationId}\(` regex) counts for the
+  client(s) the file imports from.
+- Anything not linked to a client — a controller method, a look-alike local function — is ignored.
+- Leave `clients` empty to keep the default "every hit counts" behavior.
+
+> Using [Orval](https://orval.dev/)? Your per-app `orval.config.*` already maps each spec (`input`) to a
+> client directory (`output`) — that's exactly one `clients` entry each.
 
 ## Commands
 
