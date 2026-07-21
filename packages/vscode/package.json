@@ -2,7 +2,7 @@
   "name": "route-scout-vscode",
   "displayName": "Route Scout",
   "description": "Find where each OpenAPI endpoint is used — CodeLens, tree view, and quick search over your specs.",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "publisher": "MathieuLeTyrant",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -189,6 +189,10 @@
         "title": "Route Scout: Initialize Config"
       },
       {
+        "command": "routeScout.revealEndpoint",
+        "title": "Route Scout: Go to Endpoint"
+      },
+      {
         "command": "routeScout.rebuild",
         "title": "Route Scout: Rebuild Index",
         "icon": "$(refresh)"
@@ -229,6 +233,13 @@
           "group": "navigation@3"
         }
       ],
+      "editor/context": [
+        {
+          "command": "routeScout.revealEndpoint",
+          "when": "editorLangId =~ /typescript|typescriptreact|javascript|javascriptreact|json|jsonc|yaml/",
+          "group": "navigation@9"
+        }
+      ],
       "commandPalette": [
         {
           "command": "routeScout.findEndpoint"
@@ -238,6 +249,9 @@
         },
         {
           "command": "routeScout.initConfig"
+        },
+        {
+          "command": "routeScout.revealEndpoint"
         },
         {
           "command": "routeScout.rebuild"

@@ -8,6 +8,8 @@
   usage, or peeks a list when there are several.
 - **Hover** on a usage in your code (a `use…` hook, a client call) → see the endpoint (method, path,
   summary, server, usage count) and an **"Open in spec"** link — reverse navigation, code → spec.
+- **Go to Endpoint** — right-click a usage (or run the command) to jump straight from a call site to
+  its operation in the spec.
 - **Endpoints view** (bottom panel): browse every spec → operation → usage, grouped by server / tag /
   method (nestable), and spot unused endpoints at a glance.
 - **Find Endpoint** command: fuzzy-search across all operations, then jump to a usage.

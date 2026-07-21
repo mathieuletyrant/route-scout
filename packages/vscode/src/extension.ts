@@ -463,6 +463,42 @@ async function openSpec(root: string, specFile: string, operationId: string): Pr
   editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
 }
 
+/** From a call site (symbol at the cursor) → jump to that endpoint in its spec. */
+async function revealEndpoint(): Promise<void> {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor) return;
+  await ensureIndex();
+
+  const range = editor.document.getWordRangeAtPosition(editor.selection.active);
+  const word = range && editor.document.getText(range);
+  const matches = word ? symbolNav?.get(word) : undefined;
+  if (!matches || matches.length === 0) {
+    void vscode.window.showInformationMessage(
+      'Route Scout: no endpoint matches the symbol at the cursor.',
+    );
+    return;
+  }
+
+  type Item = vscode.QuickPickItem & { scouted: Scouted };
+  const target =
+    matches.length === 1
+      ? matches[0]
+      : (
+          await vscode.window.showQuickPick<Item>(
+            matches.map((scouted) => ({
+              label: `${scouted.endpoint.operation.method.toUpperCase()} ${scouted.endpoint.operation.path}`,
+              description: serverName(scouted.endpoint.operation),
+              scouted,
+            })),
+            { title: 'Route Scout: go to endpoint' },
+          )
+        )?.scouted;
+
+  if (!target) return;
+  const op = target.endpoint.operation;
+  if (op.operationId) await openSpec(target.root, op.specFile, op.operationId);
+}
+
 async function showCallSites(scouted: Scouted): Promise<void> {
   const { endpoint, root } = scouted;
   if (endpoint.callSites.length === 0) {
@@ -661,6 +697,7 @@ export function activate(context: vscode.ExtensionContext): void {
     ),
     vscode.commands.registerCommand('routeScout.setGroupBy', () => setGroupBy()),
     vscode.commands.registerCommand('routeScout.initConfig', () => initConfig()),
+    vscode.commands.registerCommand('routeScout.revealEndpoint', () => revealEndpoint()),
     vscode.commands.registerCommand(
       'routeScout.openCallSite',
       (root: string, file: string, line: number) => openCallSite(root, file, line),

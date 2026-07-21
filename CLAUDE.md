@@ -56,7 +56,9 @@ Defaults: specs `**/openapi*` etc; sources common JS/TS; `ignoreImports: true`. 
 - **Hover + reverse nav**: hovering a usage (a `use{Op}` hook, an operationId, a client call) in any
   source file shows the endpoint (method/path/summary/server + usage count) and an **"Open in spec"**
   command link (`routeScout.openSpec` reveals the operationId line). Backed by a `symbolNav` map
-  (`operationId` + every symbol-matcher expansion → endpoints) rebuilt with the index.
+  (`operationId` + every symbol-matcher expansion → endpoints) rebuilt with the index. The
+  **`routeScout.revealEndpoint`** command (right-click / palette) jumps code → spec for the symbol at
+  the cursor, using the same `symbolNav`.
 - **`Route Scout: Initialize Config`** (`routeScout.initConfig`) scaffolds a `routescout.config.json`
   (detects specs, excludes generated dirs) and offers to set it as `configFile`.
 - Settings: `routeScout.specs`, `.sources`, `.exclude`, `.usage`, `.ignoreImports`, `.ignoreLines`,
