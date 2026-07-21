@@ -74,6 +74,12 @@ import cycles.
   channels (`/invoices/{id}`). CodeLens is **per-endpoint** (never merged) so counts match the tree; if
   still ambiguous it shows one lens per endpoint labelled by server. (Bug we fixed: merging by
   operationId made the lens show 2 where the endpoint had 1.)
+- **Shared-usage labelling**: usages are indexed **by operationId**, so when one id maps to several
+  endpoints (api + internal, or across servers) they all carry the SAME merged count — a call site
+  can't be attributed to one endpoint. The UI says so instead of a misleading per-endpoint number:
+  CodeLens appends `(shared)`, and the hover shows the count once ("N usages shared across M
+  endpoints … not attributable individually") rather than repeating it per row. (True per-endpoint
+  attribution by import source is a future feature.)
 - **Hover + reverse nav**: hovering a usage (a `use{Op}` hook, an operationId, a client call) in any
   source file shows the endpoint (method/path/summary/server + usage count) and an **"Open in spec"**
   command link (`routeScout.openSpec` reveals the operationId line). Backed by a `symbolNav` map

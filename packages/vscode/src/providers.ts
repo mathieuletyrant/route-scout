@@ -53,24 +53,38 @@ export class EndpointHoverProvider implements vscode.HoverProvider {
     const matches = symbolNav.get(document.getText(range));
     if (!matches || matches.length === 0) return undefined;
 
+    // When one operationId maps to several endpoints, usages are indexed by
+    // operationId and so can't be attributed to a single endpoint — every
+    // endpoint carries the SAME merged count. Show it once as "shared" instead
+    // of repeating a per-endpoint number that would read as misleading.
+    const shared = matches.length > 1;
+
     const md = new vscode.MarkdownString();
     md.isTrusted = true;
     md.supportThemeIcons = true;
+    if (shared) {
+      const count = matches[0]!.endpoint.callSites.length;
+      const id = matches[0]!.endpoint.operation.operationId;
+      md.appendMarkdown(
+        `$(references) **${count} usage${count === 1 ? '' : 's'}** shared across ${matches.length} ` +
+          `endpoints${id ? ` with operationId \`${id}\`` : ''} — not attributable individually\n\n`,
+      );
+    }
     matches.forEach(({ endpoint, root }, i) => {
       const op = endpoint.operation;
       const count = endpoint.callSites.length;
       if (i > 0) md.appendMarkdown('\n\n---\n\n');
       md.appendMarkdown(`**${op.method.toUpperCase()}** \`${op.path}\` — _${serverName(op)}_\n\n`);
       if (op.summary) md.appendMarkdown(`${op.summary}\n\n`);
-      md.appendMarkdown(`$(references) ${count} usage${count === 1 ? '' : 's'}`);
+      const parts: string[] = [];
+      if (!shared) parts.push(`$(references) ${count} usage${count === 1 ? '' : 's'}`);
       if (op.operationId) {
         const args = encodeURIComponent(
           JSON.stringify([root, op.operationId, op.specFile, [...endpointIdentity(op)]]),
         );
-        md.appendMarkdown(
-          `  ·  [$(go-to-file) Go to endpoint](command:routeScout.goToEndpoint?${args})`,
-        );
+        parts.push(`[$(go-to-file) Go to endpoint](command:routeScout.goToEndpoint?${args})`);
       }
+      if (parts.length > 0) md.appendMarkdown(parts.join('  ·  '));
     });
     return new vscode.Hover(md, range);
   }
@@ -95,14 +109,20 @@ export class UsageCodeLensProvider implements vscode.CodeLensProvider {
     for (let line = 0; line < document.lineCount; line += 1) {
       const id = OPERATION_ID_LINE.exec(document.lineAt(line).text)?.[1];
       if (!id || !index.has(id)) continue;
-      const endpoints = disambiguateDoc(document, index.get(id) ?? []);
+      const group = index.get(id) ?? [];
+      const endpoints = disambiguateDoc(document, group);
       const range = new vscode.Range(line, 0, line, 0);
       // Usually one endpoint per id → a plain "⟶ N usages". When an id stays
       // ambiguous, one lens per endpoint, labelled by server to tell them apart.
       const multiple = endpoints.length > 1;
+      // The id maps to several endpoints (even if we narrowed to one here), so the
+      // count is the merged operationId total — flag it so it doesn't read as a
+      // clean per-endpoint number.
+      const shared = group.length > 1;
       for (const scouted of endpoints) {
         const count = scouted.endpoint.callSites.length;
-        const suffix = count > 0 ? `${count} usage${count === 1 ? '' : 's'}` : 'no usages';
+        const usages = count > 0 ? `${count} usage${count === 1 ? '' : 's'}` : 'no usages';
+        const suffix = shared && count > 0 ? `${usages} (shared)` : usages;
         const title = multiple
           ? `⟶ ${serverName(scouted.endpoint.operation)}: ${suffix}`
           : `⟶ ${suffix}`;
