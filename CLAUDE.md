@@ -58,7 +58,11 @@ Defaults: specs `**/openapi*` etc; sources common JS/TS; `ignoreImports: true`. 
   command link (`routeScout.openSpec` reveals the operationId line). Backed by a `symbolNav` map
   (`operationId` + every symbol-matcher expansion → endpoints) rebuilt with the index. The
   **`routeScout.revealEndpoint`** command (right-click / palette) jumps code → spec for the symbol at
-  the cursor, using the same `symbolNav`.
+  the cursor, using the same `symbolNav`. It jumps to the **declaration** (a `routeScout.definitions`
+  file, e.g. `**/*.controller.ts` — scanned into `declarationNav`) if configured, else the spec;
+  `definitions` is an extension-only nav setting (a cast `ScoutConfig` field, not in core). When an
+  operationId exists on several channels (api + internal), the endpoint quickpick + a path-segment
+  match on the declaration file pick the right controller.
 - **`Route Scout: Initialize Config`** (`routeScout.initConfig`) scaffolds a `routescout.config.json`
   (detects specs, excludes generated dirs) and offers to set it as `configFile`.
 - Settings: `routeScout.specs`, `.sources`, `.exclude`, `.usage`, `.ignoreImports`, `.ignoreLines`,

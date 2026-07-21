@@ -2,7 +2,7 @@
   "name": "route-scout-vscode",
   "displayName": "Route Scout",
   "description": "Find where each OpenAPI endpoint is used — CodeLens, tree view, and quick search over your specs.",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "publisher": "MathieuLeTyrant",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -140,6 +140,14 @@
           },
           "default": [],
           "markdownDescription": "With `#routeScout.importAware#`, only count imports whose module path contains one of these substrings (e.g. `[\"generated\", \"-client\"]`). Empty = any import source."
+        },
+        "routeScout.definitions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "markdownDescription": "Globs of files that **declare** operationIds in code (e.g. NestJS controllers `**/*.controller.ts`). When set, *Go to Endpoint* and the hover link jump to the declaration there instead of the generated spec. Empty = go to the spec."
         },
         "routeScout.configFile": {
           "type": "string",

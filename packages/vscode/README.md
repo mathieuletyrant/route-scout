@@ -8,8 +8,9 @@
   usage, or peeks a list when there are several.
 - **Hover** on a usage in your code (a `use…` hook, a client call) → see the endpoint (method, path,
   summary, server, usage count) and an **"Open in spec"** link — reverse navigation, code → spec.
-- **Go to Endpoint** — right-click a usage (or run the command) to jump straight from a call site to
-  its operation in the spec.
+- **Go to Endpoint** — right-click a usage (or run the command) to jump from a call site to its
+  operation. With `routeScout.definitions` set (globs of files that declare operationIds, e.g. NestJS
+  `**/*.controller.ts`), it lands on the **controller**; otherwise on the generated spec.
 - **Endpoints view** (bottom panel): browse every spec → operation → usage, grouped by server / tag /
   method (nestable), and spot unused endpoints at a glance.
 - **Find Endpoint** command: fuzzy-search across all operations, then jump to a usage.
@@ -32,6 +33,7 @@ All settings live under `routeScout.*` and are per-workspace-folder.
 | `routeScout.importAware` | Only count a symbol match if the identifier was actually imported — kills collisions like Apollo `const [getDevice] = useGetDeviceLazyQuery()` (default `false`). |
 | `routeScout.importFrom` | With `importAware`, restrict to imports whose module path contains one of these substrings. |
 | `routeScout.ignoreLines` | Regexes for extra lines to skip.                                          |
+| `routeScout.definitions` | Globs of files that *declare* operationIds (controllers) — for *Go to Endpoint*. |
 | `routeScout.configFile`  | Path to a JSON config file that replaces the settings above.               |
 | `routeScout.rebuildOnSave` | Re-index when a spec/source file is saved (default `true`).              |
 | `routeScout.groupBy`   | Ordered grouping dimensions for the view (`server` / `tag` / `method`).      |

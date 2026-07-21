@@ -21,8 +21,24 @@ interface Scouted {
   endpoint: EndpointUsage;
 }
 
+// Core config + the extension-only `definitions` (globs of files that *declare*
+// operationIds, e.g. NestJS controllers). Editor-navigation only — the core
+// scanner ignores it, so it stays out of `@route-scout/core`.
+type ScoutConfig = RouteScoutConfig & { definitions?: string[] };
+
+/** Where an operationId is declared (a `@ApiOperation`/`operationId:` line). */
+interface DeclLoc {
+  root: string;
+  file: string;
+  line: number;
+}
+
 let state: Scouted[] | null = null;
 let building: Promise<Scouted[]> | null = null;
+
+// operationId → its declaration site(s) from `definitions` files. Lets
+// "Go to Endpoint" jump to the real definition (controller) instead of the spec.
+let declarationNav: Map<string, DeclLoc[]> | null = null;
 
 // Set on activation. `groupState` holds the view's grouping choice as workspace
 // state (a view toggle, not a persisted setting), so changing it never has to
@@ -47,14 +63,14 @@ function addNav(nav: Map<string, Scouted[]>, key: string | null, scouted: Scoute
 // Config
 // ---------------------------------------------------------------------------
 
-function readConfig(folder: vscode.WorkspaceFolder): RouteScoutConfig {
+function readConfig(folder: vscode.WorkspaceFolder): ScoutConfig {
   const cfg = vscode.workspace.getConfiguration('routeScout', folder.uri);
   const root = folder.uri.fsPath;
 
   const configFile = cfg.get<string>('configFile')?.trim();
   if (configFile) {
     const abs = join(root, configFile);
-    const parsed = JSON.parse(readFileSync(abs, 'utf8')) as RouteScoutConfig;
+    const parsed = JSON.parse(readFileSync(abs, 'utf8')) as ScoutConfig;
     return { ...parsed, root };
   }
 
@@ -68,6 +84,7 @@ function readConfig(folder: vscode.WorkspaceFolder): RouteScoutConfig {
     ignoreLines: cfg.get<string[]>('ignoreLines'),
     importAware: cfg.get<boolean>('importAware'),
     importFrom: cfg.get<string[]>('importFrom'),
+    definitions: cfg.get<string[]>('definitions'),
   };
 }
 
@@ -79,6 +96,7 @@ async function buildAll(): Promise<Scouted[]> {
   const folders = vscode.workspace.workspaceFolders ?? [];
   const scouted: Scouted[] = [];
   const nav = new Map<string, Scouted[]>();
+  const decls = new Map<string, DeclLoc[]>();
 
   await vscode.window.withProgress(
     { location: vscode.ProgressLocation.Window, title: 'Route Scout: indexing endpoints…' },
@@ -99,6 +117,7 @@ async function buildAll(): Promise<Scouted[]> {
               addNav(nav, expandTemplate(template, endpoint.operation, 'literal'), item);
             }
           }
+          await collectDeclarations(folder, config.definitions ?? [], decls);
         } catch (error) {
           void vscode.window.showErrorMessage(
             `Route Scout: ${error instanceof Error ? error.message : String(error)}`,
@@ -109,7 +128,34 @@ async function buildAll(): Promise<Scouted[]> {
   );
 
   symbolNav = nav;
+  declarationNav = decls;
   return scouted;
+}
+
+/** Scan `definitions` files for `operationId: '…'` declarations (e.g. controllers). */
+async function collectDeclarations(
+  folder: vscode.WorkspaceFolder,
+  globs: string[],
+  decls: Map<string, DeclLoc[]>,
+): Promise<void> {
+  const root = folder.uri.fsPath;
+  for (const glob of globs) {
+    const uris = await vscode.workspace.findFiles(
+      new vscode.RelativePattern(folder, glob),
+      '**/node_modules/**',
+    );
+    for (const uri of uris) {
+      const text = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8');
+      const file = toPosix(relative(root, uri.fsPath));
+      text.split(/\r?\n/).forEach((line, i) => {
+        const id = OPERATION_ID_LINE.exec(line)?.[1];
+        if (!id) return;
+        const list = decls.get(id) ?? [];
+        list.push({ root, file, line: i + 1 });
+        decls.set(id, list);
+      });
+    }
+  }
 }
 
 function ensureIndex(): Promise<Scouted[]> {
@@ -130,6 +176,7 @@ function invalidate(): void {
   state = null;
   building = null;
   symbolNav = null;
+  declarationNav = null;
 }
 
 // ---------------------------------------------------------------------------
@@ -235,8 +282,13 @@ class EndpointHoverProvider implements vscode.HoverProvider {
       if (op.summary) md.appendMarkdown(`${op.summary}\n\n`);
       md.appendMarkdown(`$(references) ${count} usage${count === 1 ? '' : 's'}`);
       if (op.operationId) {
-        const args = encodeURIComponent(JSON.stringify([root, op.specFile, op.operationId]));
-        md.appendMarkdown(`  ·  [$(go-to-file) Open in spec](command:routeScout.openSpec?${args})`);
+        const segment = firstPathSegment(op.path);
+        const args = encodeURIComponent(
+          JSON.stringify([root, op.operationId, op.specFile, segment]),
+        );
+        md.appendMarkdown(
+          `  ·  [$(go-to-file) Go to endpoint](command:routeScout.goToEndpoint?${args})`,
+        );
       }
     });
     return new vscode.Hover(md, range);
@@ -463,7 +515,35 @@ async function openSpec(root: string, specFile: string, operationId: string): Pr
   editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
 }
 
-/** From a call site (symbol at the cursor) → jump to that endpoint in its spec. */
+const firstPathSegment = (path: string): string | undefined => path.split('/').find(Boolean);
+
+/** When several files declare the same operationId, prefer the one whose path matches the channel. */
+function pickDeclaration(decls: DeclLoc[], pathSegment?: string): DeclLoc | undefined {
+  if (decls.length <= 1) return decls[0];
+  if (pathSegment) {
+    const seg = pathSegment.toLowerCase();
+    const hit = decls.find((d) => d.file.toLowerCase().includes(seg));
+    if (hit) return hit;
+  }
+  return decls[0];
+}
+
+/** Jump to the endpoint's declaration (a `definitions` file, e.g. a controller) if known, else its spec. */
+async function goToEndpoint(
+  root: string,
+  operationId: string,
+  specFile: string,
+  pathSegment?: string,
+): Promise<void> {
+  const decl = pickDeclaration(declarationNav?.get(operationId) ?? [], pathSegment);
+  if (decl) {
+    await openCallSite(decl.root, decl.file, decl.line);
+    return;
+  }
+  await openSpec(root, specFile, operationId);
+}
+
+/** From a call site (symbol at the cursor) → jump to that endpoint's definition (or spec). */
 async function revealEndpoint(): Promise<void> {
   const editor = vscode.window.activeTextEditor;
   if (!editor) return;
@@ -496,7 +576,9 @@ async function revealEndpoint(): Promise<void> {
 
   if (!target) return;
   const op = target.endpoint.operation;
-  if (op.operationId) await openSpec(target.root, op.specFile, op.operationId);
+  if (op.operationId) {
+    await goToEndpoint(target.root, op.operationId, op.specFile, firstPathSegment(op.path));
+  }
 }
 
 async function showCallSites(scouted: Scouted): Promise<void> {
@@ -703,9 +785,9 @@ export function activate(context: vscode.ExtensionContext): void {
       (root: string, file: string, line: number) => openCallSite(root, file, line),
     ),
     vscode.commands.registerCommand(
-      'routeScout.openSpec',
-      (root: string, specFile: string, operationId: string) =>
-        openSpec(root, specFile, operationId),
+      'routeScout.goToEndpoint',
+      (root: string, operationId: string, specFile: string, pathSegment?: string) =>
+        goToEndpoint(root, operationId, specFile, pathSegment),
     ),
     vscode.commands.registerCommand('routeScout.rebuild', async () => {
       invalidate();

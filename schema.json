@@ -92,6 +92,12 @@
       "items": { "type": "string" },
       "description": "With importAware, only count imports whose module path contains one of these substrings (e.g. [\"generated\", \"-client\"]). Empty means any source.",
       "default": []
+    },
+    "definitions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "VSCode extension only: globs of files that declare operationIds in code (e.g. NestJS controllers **/*.controller.ts). Go-to-Endpoint jumps to the declaration there instead of the generated spec. Ignored by the CLI/core scanner.",
+      "default": []
     }
   }
 }
