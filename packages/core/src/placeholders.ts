@@ -22,7 +22,11 @@ export function splitWords(id: string): string[] {
     .filter(Boolean);
 }
 
-const cap = (word: string): string => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+// Uppercase the first letter, PRESERVE the rest — so acronyms survive
+// (`MDM` → `MDM`, not `Mdm`). Generators (orval, openapi-generator, …) keep
+// acronym casing in `use<Op>` hooks and type names, so we must match that:
+// operationId `createMDMControl` → `useCreateMDMControl`, not `useCreateMdmControl`.
+const cap = (word: string): string => word.charAt(0).toUpperCase() + word.slice(1);
 const pascal = (words: string[]): string => words.map(cap).join('');
 const camel = (words: string[]): string =>
   words.map((word, i) => (i === 0 ? word.toLowerCase() : cap(word))).join('');

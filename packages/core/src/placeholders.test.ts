@@ -43,6 +43,12 @@ describe('expandTemplate', () => {
     expect(expandTemplate('{operationId:kebab}', op(), 'literal')).toBe('get-user-by-id');
   });
 
+  it('preserves acronym casing in PascalCase (matches generated hooks)', () => {
+    const o = op({ operationId: 'createMDMControl' });
+    expect(expandTemplate('{OperationId}', o, 'literal')).toBe('CreateMDMControl');
+    expect(expandTemplate('use{OperationId}', o, 'literal')).toBe('useCreateMDMControl');
+  });
+
   it('expands method and path placeholders', () => {
     expect(expandTemplate('{METHOD} {path}', op(), 'literal')).toBe('GET /users/{id}');
   });

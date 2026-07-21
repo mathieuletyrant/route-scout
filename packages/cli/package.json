@@ -1,6 +1,6 @@
 {
   "name": "route-scout-cli",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Find where each OpenAPI endpoint is used across your codebase.",
   "license": "MIT",
   "type": "module",
