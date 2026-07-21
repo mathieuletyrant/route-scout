@@ -9,6 +9,11 @@ name: Release
 #   VSCE_PAT   → also publish to the VS Marketplace
 #   OVSX_TOKEN → also publish to Open VSX
 # Ordinary commits that don't change the version are no-ops.
+#
+# The CLI (`route-scout` on npm) ships on its OWN cadence in a separate job:
+# bump the version in packages/cli/package.json and push. Opt-in via NPM_TOKEN;
+# it publishes only when that version isn't already on npm. Decoupled from the
+# extension release above — either can ship without the other.
 on:
   push:
     branches: [main]
@@ -108,3 +113,57 @@ jobs:
             echo "::error::Open VSX publish failed" && failed=1
           fi
           exit $failed
+
+  # Publish the CLI to npm on its own version cadence. Opt-in: no-op unless the
+  # NPM_TOKEN secret is set. Skips when packages/cli/package.json's version is
+  # already on the registry, so ordinary pushes are no-ops.
+  publish-npm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Decide whether to publish the CLI
+        id: check
+        run: |
+          NAME=$(node -p "require('./packages/cli/package.json').name")
+          VERSION=$(node -p "require('./packages/cli/package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if [ -z "${{ secrets.NPM_TOKEN }}" ]; then
+            echo "NPM_TOKEN not set — skipping npm publish." && echo "publish=false" >> "$GITHUB_OUTPUT"
+          elif npm view "$NAME@$VERSION" version >/dev/null 2>&1; then
+            echo "$NAME@$VERSION already on npm — skipping." && echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Publishing $NAME@$VERSION to npm." && echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: pnpm/action-setup@v4
+        if: steps.check.outputs.publish == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.publish == 'true'
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - if: steps.check.outputs.publish == 'true'
+        run: pnpm install --frozen-lockfile
+
+      # Gate the publish on a green build (same bar as the extension release).
+      - if: steps.check.outputs.publish == 'true'
+        run: pnpm check
+      - if: steps.check.outputs.publish == 'true'
+        run: pnpm typecheck
+      - if: steps.check.outputs.publish == 'true'
+        run: pnpm test
+      # Builds core so the CLI's esbuild bundle can resolve @route-scout/core.
+      - if: steps.check.outputs.publish == 'true'
+        run: pnpm build
+
+      # `prepublishOnly` re-bundles the CLI; --no-git-checks skips pnpm's
+      # clean-tree/branch guard (irrelevant in CI).
+      - name: Publish CLI to npm
+        if: steps.check.outputs.publish == 'true'
+        working-directory: packages/cli
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: pnpm publish --no-git-checks
