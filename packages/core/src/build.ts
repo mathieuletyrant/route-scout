@@ -2,9 +2,10 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { glob } from 'tinyglobby';
 
+import { clientSpecsForModule, normalizeImport, resolveClients } from './clients.js';
 import { type RouteScoutConfig, resolveConfig } from './config.js';
 import { compileMatchers } from './patterns.js';
-import { importedSymbols, maskImports, scanContent } from './scan.js';
+import { maskImports, parseImports, scanContent } from './scan.js';
 import { loadOperations } from './specs.js';
 import type { CallSite, EndpointUsage, IndexResult, Operation } from './types.js';
 
@@ -38,6 +39,13 @@ export async function buildIndex(
   const matchers = compileMatchers(operations, resolved.usage);
   const ignoreLines = resolved.ignoreLines.map((pattern) => new RegExp(pattern));
 
+  // Client gating: only active when `clients` is configured. A hit then counts
+  // only if it's linked to a declared client, and is attributed to that client's
+  // spec — resolving operationId collisions and dropping non-client code.
+  const gated = resolved.clients.length > 0;
+  const resolvedClients = resolveClients(resolved.clients, specFiles);
+  const specFileByOp = operations.map((operation) => operation.specFile);
+
   const sourceFiles = (
     await glob(resolved.sources, { cwd: root, ignore: resolved.exclude, dot: false })
   ).map(toPosix);
@@ -48,11 +56,40 @@ export async function buildIndex(
   await mapLimit(sourceFiles, options.concurrency ?? 32, async (relFile) => {
     const content = await readFile(join(root, relFile), 'utf8');
     const matchContent = resolved.ignoreImports ? maskImports(content) : content;
-    // Parse imports from the original content (before masking) to gate symbols.
-    const allowed = resolved.importAware
-      ? importedSymbols(content, resolved.importFrom)
-      : undefined;
-    for (const hit of scanContent(relFile, matchContent, matchers, ignoreLines, content, allowed)) {
+    // Link this file's imports to declared clients (from the original content,
+    // before masking). `symbolSpec`: an imported identifier → its client's spec
+    // files. `fileSpecs`: every client spec the file imports from — used for
+    // property-access calls where the operationId isn't itself imported.
+    let keep: ((op: number, identifier: string | null) => boolean) | undefined;
+    if (gated) {
+      const symbolSpec = new Map<string, Set<string>>();
+      const fileSpecs = new Set<string>();
+      for (const imported of parseImports(content)) {
+        const specs = clientSpecsForModule(
+          normalizeImport(imported.module, relFile),
+          resolvedClients,
+        );
+        if (specs.size === 0) continue;
+        for (const spec of specs) fileSpecs.add(spec);
+        for (const ident of imported.idents) {
+          const set = symbolSpec.get(ident) ?? new Set<string>();
+          for (const spec of specs) set.add(spec);
+          symbolSpec.set(ident, set);
+        }
+      }
+      keep = (op, identifier) => {
+        const opSpec = specFileByOp[op]!;
+        // Symbol hit: counts only if that identifier was imported from a client
+        // (a real hook/function call), attributed to that client's spec. A bare
+        // non-imported name — a wrapper method declaration, a local call — is not
+        // a client usage, so it's dropped (no file-level fallback for symbols).
+        if (identifier !== null) return symbolSpec.get(identifier)?.has(opSpec) ?? false;
+        // Property-access / regex hit (`.op(`): attributed to the client(s) the
+        // file imports from.
+        return fileSpecs.has(opSpec);
+      };
+    }
+    for (const hit of scanContent(relFile, matchContent, matchers, ignoreLines, content, keep)) {
       const list = callSitesByOp.get(hit.op) ?? [];
       list.push(hit.site);
       callSitesByOp.set(hit.op, list);

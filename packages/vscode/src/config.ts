@@ -29,8 +29,7 @@ export function readConfig(folder: vscode.WorkspaceFolder): ScoutConfig {
     usage: cfg.get<RouteScoutConfig['usage']>('usage'),
     ignoreImports: cfg.get<boolean>('ignoreImports'),
     ignoreLines: cfg.get<string[]>('ignoreLines'),
-    importAware: cfg.get<boolean>('importAware'),
-    importFrom: cfg.get<string[]>('importFrom'),
+    clients: cfg.get<RouteScoutConfig['clients']>('clients'),
     definitions: cfg.get<string[]>('definitions'),
   };
 }

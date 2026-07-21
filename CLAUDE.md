@@ -29,15 +29,26 @@ Config-driven, **no AST / no framework coupling**. `buildIndex(config)`:
    - `kind: 'symbol'` → whole-identifier match (fast; default). `kind: 'regex'` → per-line regex.
 3. `scan.ts` — scan source files. `maskImports()` blanks `import` / `export … from` / side-effect
    imports **multi-line aware, preserving line/column positions** (so imported symbols never count as
-   usage). `scanContent()` matches against masked content but previews from the original.
-   `importedSymbols()` + `importAware`/`importFrom` config: when on, a **symbol** hit only counts if the
-   identifier was actually imported (optionally from a module whose path contains an `importFrom`
-   substring) — kills collisions like Apollo `const [getDevice] = useGetDeviceLazyQuery()`.
-4. `build.ts` — orchestrates, dedupes call sites per (file,line), returns `IndexResult`.
-5. `naming.ts` — `serverName(op)`: `info.title` else filename with `-openapi`/`swagger` stripped.
+   usage). `scanContent()` matches against masked content but previews from the original, and takes an
+   optional `keep(op, identifier)` predicate (client gating, below). `parseImports()` returns each
+   import's `{ module, idents }` for that gating.
+4. `clients.ts` — **the client model.** `clients: [{ module, spec }]`. `normalizeImport()` turns an import
+   specifier into something matchable: **relative** specifiers are resolved to a repo-relative path
+   (`../__generated__/client.js` → `apps/…/providers/companyServer/__generated__/client`), bare/alias
+   kept as-is (`~/__generated__/mdm-server-client/…`). `resolveClients()` maps each client's `spec` to
+   concrete spec files; `clientSpecsForModule()` returns the spec(s) a normalized module belongs to.
+5. `build.ts` — orchestrates; dedupes call sites per (file,line); returns `IndexResult` (incl. `files`).
+   **Client gating** (only when `clients` non-empty): per file, link imports to clients, then keep a hit
+   iff it's client-linked — a **symbol** hit counts only if that identifier was **imported from a client**
+   (→ that client's spec); a **property-access/regex** hit (`.op(`) counts for the client(s) the file
+   imports from. So an `operationId` shared by several endpoints is attributed to the right one, and
+   look-alike code (a controller method / local service named like an operationId) is ignored. Empty
+   `clients` = every matcher hit counts (legacy behavior).
+6. `naming.ts` — `serverName(op)`: `info.title` else filename with `-openapi`/`swagger` stripped.
 
-Defaults: specs `**/openapi*` etc; sources common JS/TS; `ignoreImports: true`. Default matchers:
-`{operationId}` + `use{OperationId}` (covers generated clients + react-query/swr hooks).
+Defaults: specs `**/openapi*` etc; sources common JS/TS; `ignoreImports: true`; `clients: []`. Default
+matchers: `{operationId}` + `use{OperationId}` (covers generated clients + react-query/swr hooks). Note:
+`importAware`/`importFrom` were **removed** — the `clients` model supersedes them.
 
 ## VSCode extension (packages/vscode/src)
 
@@ -74,12 +85,11 @@ import cycles.
   channels (`/invoices/{id}`). CodeLens is **per-endpoint** (never merged) so counts match the tree; if
   still ambiguous it shows one lens per endpoint labelled by server. (Bug we fixed: merging by
   operationId made the lens show 2 where the endpoint had 1.)
-- **Shared-usage labelling**: usages are indexed **by operationId**, so when one id maps to several
-  endpoints (api + internal, or across servers) they all carry the SAME merged count — a call site
-  can't be attributed to one endpoint. The UI says so instead of a misleading per-endpoint number:
-  CodeLens appends `(shared)`, and the hover shows the count once ("N usages shared across M
-  endpoints … not attributable individually") rather than repeating it per row. (True per-endpoint
-  attribution by import source is a future feature.)
+- **Shared-usage labelling** (fallback only when `clients` is **not** configured): without `clients`,
+  usages are indexed by operationId, so an id on several endpoints carries the SAME merged count — the UI
+  says so (CodeLens `(shared)`; hover shows the count once, "N usages shared across M endpoints … not
+  attributable individually"). **With `clients`, usages are attributed per-endpoint**, so counts are real
+  and the label is suppressed (`store.hasClients()` gates it in `providers.ts`).
 - **Hover + reverse nav**: hovering a usage (a `use{Op}` hook, an operationId, a client call) in any
   source file shows the endpoint (method/path/summary/server + usage count) and an **"Open in spec"**
   command link (`routeScout.openSpec` reveals the operationId line). Backed by a `symbolNav` map
@@ -97,7 +107,7 @@ import cycles.
 - **`Route Scout: Initialize Config`** (`routeScout.initConfig`) scaffolds a `routescout.config.json`
   (detects specs, excludes generated dirs) and offers to set it as `configFile`.
 - Settings: `routeScout.specs`, `.sources`, `.exclude`, `.usage`, `.ignoreImports`, `.ignoreLines`,
-  `.importAware`, `.importFrom`, `.configFile`, `.rebuildOnSave`, `.groupBy`. `routeScout.configFile`
+  `.clients`, `.definitions`, `.configFile`, `.rebuildOnSave`, `.groupBy`. `routeScout.configFile`
   (JSON only, = core config, so no `groupBy` there) replaces the individual scanning settings.
 
 ## Commands
@@ -170,8 +180,14 @@ at `/Users/mathieu/Primo/sourcehub/routescout.config.json` (+ `.vscode/settings.
 points for that repo:
 
 - specs `packages/openapi-specs/*-openapi.json`; sources `apps/**/src/**/*.{ts,tsx}`.
-- **Exclude the definition side**: generated clients (`__generated__`, `*-client`, `*.schemas/msw/zod.ts`)
-  **and `**/*.controller.ts`** — the NestJS controller method is named after the operationId, so it would
-  be counted as a false usage otherwise.
-- Default matchers cover both cockpit-ui/procurement-ui react-query hooks (`use{Op}`) and server-to-server
-  axios factory `.op(...)` calls (the `{operationId}` token matches the property access).
+- **Uses the `clients` model** (the whole reason it was built). Generated clients:
+  cockpit/procurement UIs import hooks from `~/__generated__/<server>-client/…` (alias — the path names the
+  server); server-to-server providers import a factory from `providers/<server>/__generated__/client.js`
+  (relative — only the *resolved* path names the server, hence `normalizeImport`) then call
+  `api.op(...)`. So each client maps to its `*-openapi.json` spec; declare one `clients` entry per
+  (client dir → spec). This attributes shared operationIds correctly (e.g. `getDeviceFilterCatalog`:
+  Company=1, MDM=1) and ignores controller methods / local services named like an operationId — **no more
+  giant `sources` blocklist needed**, just exclude generated-client dirs so the client's own definitions
+  aren't counted.
+- Matchers: `{operationId}` + `use{OperationId}` (imported hooks/fns) + a `\.{operationId}\(` regex for the
+  server-to-server factory `.op(...)` property calls.

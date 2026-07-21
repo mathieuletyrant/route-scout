@@ -2,7 +2,7 @@
   "name": "route-scout-vscode",
   "displayName": "Route Scout",
   "description": "Find where each OpenAPI endpoint is used — CodeLens, tree view, and quick search over your specs.",
-  "version": "0.6.4",
+  "version": "0.7.0",
   "publisher": "MathieuLeTyrant",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -128,18 +128,39 @@
           "default": [],
           "markdownDescription": "Extra escape hatch: source lines matching any of these regexes are skipped. Imports are already handled by `#routeScout.ignoreImports#`."
         },
-        "routeScout.importAware": {
-          "type": "boolean",
-          "default": false,
-          "markdownDescription": "Only count a `symbol` match if that identifier was actually imported into the file. Kills false positives from locally-defined / destructured names sharing an operationId (e.g. Apollo `const [getDevice] = useGetDeviceLazyQuery()`)."
-        },
-        "routeScout.importFrom": {
+        "routeScout.clients": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "object",
+            "properties": {
+              "module": {
+                "type": [
+                  "string",
+                  "array"
+                ],
+                "items": {
+                  "type": "string"
+                },
+                "markdownDescription": "Import-path substring(s)/glob(s) identifying the generated client's module (matched against the specifier for bare/alias imports and the resolved path for relative imports)."
+              },
+              "spec": {
+                "type": [
+                  "string",
+                  "array"
+                ],
+                "items": {
+                  "type": "string"
+                },
+                "markdownDescription": "Spec-filename substring(s)/glob(s) this client talks to (e.g. `mdm-server-openapi.json`)."
+              }
+            },
+            "required": [
+              "module",
+              "spec"
+            ]
           },
           "default": [],
-          "markdownDescription": "With `#routeScout.importAware#`, only count imports whose module path contains one of these substrings (e.g. `[\"generated\", \"-client\"]`). Empty = any import source."
+          "markdownDescription": "Generated API clients. **When set, only calls linked to a declared client count as usages**, attributed to that client's `spec` — resolving `operationId` collisions across servers/channels and ignoring look-alike code (controllers, local services). Empty = every matcher hit counts."
         },
         "routeScout.definitions": {
           "type": "array",

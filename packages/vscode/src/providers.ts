@@ -4,7 +4,7 @@ import { serverName } from '@route-scout/core';
 import * as vscode from 'vscode';
 
 import { disambiguate, endpointIdentity, OPERATION_ID_LINE, type Scouted, toPosix } from './nav.js';
-import { byOperationId, ensureIndex, getState, getSymbolNav } from './store.js';
+import { byOperationId, ensureIndex, getState, getSymbolNav, hasClients } from './store.js';
 
 /** Adapt {@link disambiguate} to a live editor document (see `nav.ts`). */
 function disambiguateDoc(document: vscode.TextDocument, candidates: Scouted[]): Scouted[] {
@@ -53,11 +53,11 @@ export class EndpointHoverProvider implements vscode.HoverProvider {
     const matches = symbolNav.get(document.getText(range));
     if (!matches || matches.length === 0) return undefined;
 
-    // When one operationId maps to several endpoints, usages are indexed by
-    // operationId and so can't be attributed to a single endpoint — every
-    // endpoint carries the SAME merged count. Show it once as "shared" instead
-    // of repeating a per-endpoint number that would read as misleading.
-    const shared = matches.length > 1;
+    // Without `clients`, one operationId maps to several endpoints that all
+    // carry the SAME merged count (not attributable) — show it once as "shared".
+    // With `clients`, usages are attributed per-endpoint so the counts are real
+    // and we show them per row.
+    const shared = matches.length > 1 && !hasClients();
 
     const md = new vscode.MarkdownString();
     md.isTrusted = true;
@@ -115,10 +115,9 @@ export class UsageCodeLensProvider implements vscode.CodeLensProvider {
       // Usually one endpoint per id → a plain "⟶ N usages". When an id stays
       // ambiguous, one lens per endpoint, labelled by server to tell them apart.
       const multiple = endpoints.length > 1;
-      // The id maps to several endpoints (even if we narrowed to one here), so the
-      // count is the merged operationId total — flag it so it doesn't read as a
-      // clean per-endpoint number.
-      const shared = group.length > 1;
+      // Without `clients` the id's count is the merged operationId total across
+      // endpoints — flag it "(shared)". With `clients` it's attributed, so no flag.
+      const shared = group.length > 1 && !hasClients();
       for (const scouted of endpoints) {
         const count = scouted.endpoint.callSites.length;
         const usages = count > 0 ? `${count} usage${count === 1 ? '' : 's'}` : 'no usages';

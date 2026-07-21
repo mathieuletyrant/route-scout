@@ -1,6 +1,13 @@
 export type { BuildOptions, ProgressReporter } from './build.js';
 export { buildIndex } from './build.js';
-export type { ResolvedConfig, RouteScoutConfig, UsageMatcher } from './config.js';
+export {
+  clientSpecsForModule,
+  moduleMatches,
+  normalizeImport,
+  type ResolvedClient,
+  resolveClients,
+} from './clients.js';
+export type { ClientConfig, ResolvedConfig, RouteScoutConfig, UsageMatcher } from './config.js';
 export {
   DEFAULT_EXCLUDE,
   DEFAULT_IGNORE_LINES,
@@ -11,7 +18,7 @@ export {
 } from './config.js';
 export { serverName } from './naming.js';
 export { escapeRegExp, expandTemplate, pathToRegex, splitWords } from './placeholders.js';
-export { importedSymbols, maskImports } from './scan.js';
+export { maskImports, parseImports } from './scan.js';
 export { loadOperations, loadSpec } from './specs.js';
 export type {
   CallSite,

@@ -26,6 +26,29 @@ export interface UsageMatcher {
   flags?: string;
 }
 
+/**
+ * A generated API client. When `clients` is non-empty, a call site only counts
+ * as a usage if it is **linked to one of these clients**, and it is attributed
+ * to the endpoints of that client's `spec` — so an `operationId` shared by
+ * several endpoints (api/internal, or across servers) is resolved to the right
+ * one, and code that merely reuses the name (a controller method, a local
+ * service) is ignored.
+ *
+ * A call is linked to a client when the matched symbol was imported from one of
+ * its `module`s, or (for property-access calls) when the file imports from one.
+ */
+export interface ClientConfig {
+  /**
+   * Import-path substring(s) — or glob(s) with `*` — identifying the client's
+   * module. Matched against the import specifier for bare/alias imports
+   * (`~/__generated__/mdm-server-client/…`) and against the **resolved**
+   * repo-relative path for relative imports (`../__generated__/client.js`).
+   */
+  module: string | string[];
+  /** Spec-filename substring(s)/glob(s) this client talks to (e.g. `mdm-server-openapi.json`). */
+  spec: string | string[];
+}
+
 /** User-facing configuration. All globs are evaluated relative to {@link root}. */
 export interface RouteScoutConfig {
   /** Base directory. Defaults to `process.cwd()`. */
@@ -50,19 +73,11 @@ export interface RouteScoutConfig {
    */
   ignoreLines?: string[];
   /**
-   * When true, a `symbol` match only counts if that identifier was actually
-   * imported into the file. Kills false positives from locally-defined or
-   * destructured names that happen to share an operationId (e.g. an Apollo
-   * `const [getDevice] = useGetDeviceLazyQuery()`). Off by default.
-   * (Only affects `symbol` matchers; `regex` matchers are unaffected.)
+   * Generated API clients. **When non-empty, only calls linked to a declared
+   * client count as usages**, attributed per the client's `spec`. When empty
+   * (default), every matcher hit counts (no client gating).
    */
-  importAware?: boolean;
-  /**
-   * With {@link importAware}, restrict counted imports to modules whose path
-   * contains one of these substrings (e.g. `["generated", "-client"]`). Empty
-   * means any import source qualifies.
-   */
-  importFrom?: string[];
+  clients?: ClientConfig[];
 }
 
 /** Config with every field filled in. */
@@ -112,8 +127,7 @@ export function resolveConfig(
     usage: nonEmpty(config.usage) ?? DEFAULT_USAGE,
     ignoreImports: config.ignoreImports ?? true,
     ignoreLines: config.ignoreLines ?? DEFAULT_IGNORE_LINES,
-    importAware: config.importAware ?? false,
-    importFrom: config.importFrom ?? [],
+    clients: config.clients ?? [],
   };
 }
 

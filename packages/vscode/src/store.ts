@@ -26,6 +26,11 @@ export const getState = (): Scouted[] | null => state;
 export const getSymbolNav = (): Map<string, Scouted[]> | null => symbolNav;
 export const getDeclarationNav = (): Map<string, DeclLoc[]> | null => declarationNav;
 
+// True when any folder configures `clients` — usages are then attributed
+// per-endpoint, so counts are accurate and the "(shared)" hint is suppressed.
+let clientsConfigured = false;
+export const hasClients = (): boolean => clientsConfigured;
+
 function addNav(nav: Map<string, Scouted[]>, key: string | null, scouted: Scouted): void {
   if (!key) return;
   const list = nav.get(key) ?? [];
@@ -51,6 +56,7 @@ async function buildAll(): Promise<Scouted[]> {
   const scouted: Scouted[] = [];
   const nav = new Map<string, Scouted[]>();
   const decls = new Map<string, DeclLoc[]>();
+  clientsConfigured = false;
 
   log.info(`Indexing ${folders.length} workspace folder(s)…`);
   await vscode.window.withProgress(
@@ -60,6 +66,7 @@ async function buildAll(): Promise<Scouted[]> {
         try {
           const config = readConfig(folder);
           const resolved = resolveConfig(config);
+          if (resolved.clients.length > 0) clientsConfigured = true;
           const symbolTemplates = resolved.usage
             .filter((m) => m.kind === 'symbol')
             .map((m) => m.template);

@@ -27,8 +27,7 @@ const REINDEX_KEYS = [
   'usage',
   'ignoreImports',
   'ignoreLines',
-  'importAware',
-  'importFrom',
+  'clients',
   'configFile',
 ];
 

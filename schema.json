@@ -82,15 +82,26 @@
       "description": "Extra escape hatch: source lines matching any of these regexes are skipped. Imports are handled by ignoreImports.",
       "default": []
     },
-    "importAware": {
-      "type": "boolean",
-      "description": "Only count a `symbol` match if the identifier was actually imported into the file. Kills false positives from locally-defined / destructured names that share an operationId.",
-      "default": false
-    },
-    "importFrom": {
+    "clients": {
       "type": "array",
-      "items": { "type": "string" },
-      "description": "With importAware, only count imports whose module path contains one of these substrings (e.g. [\"generated\", \"-client\"]). Empty means any source.",
+      "description": "Generated API clients. When set, only calls linked to a declared client count as usages, attributed to that client's spec — resolving operationId collisions across servers/channels and ignoring look-alike code (controllers, local services). Empty means every matcher hit counts.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "module": {
+            "type": ["string", "array"],
+            "items": { "type": "string" },
+            "description": "Import-path substring(s)/glob(s) identifying the client module. Matched against the specifier for bare/alias imports and the resolved repo-relative path for relative imports."
+          },
+          "spec": {
+            "type": ["string", "array"],
+            "items": { "type": "string" },
+            "description": "Spec-filename substring(s)/glob(s) this client talks to (e.g. mdm-server-openapi.json)."
+          }
+        },
+        "required": ["module", "spec"],
+        "additionalProperties": false
+      },
       "default": []
     },
     "definitions": {
