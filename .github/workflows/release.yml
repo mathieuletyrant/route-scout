@@ -66,15 +66,8 @@ jobs:
         if: steps.check.outputs.release == 'true'
         run: pnpm package:vscode
 
-      - name: Publish to VS Marketplace
-        if: ${{ steps.check.outputs.release == 'true' && env.VSCE_PAT != '' }}
-        working-directory: packages/vscode
-        run: pnpm exec vsce publish --packagePath route-scout.vsix
-
-      - name: Publish to Open VSX
-        if: ${{ steps.check.outputs.release == 'true' && env.OVSX_TOKEN != '' }}
-        run: pnpm dlx ovsx publish packages/vscode/route-scout.vsix -p "$OVSX_TOKEN"
-
+      # Tag + GitHub Release first, so the artifact is guaranteed and a flaky
+      # store publish can't wedge re-runs. Store steps are best-effort.
       - name: Tag and create GitHub Release
         if: steps.check.outputs.release == 'true'
         env:
@@ -85,3 +78,16 @@ jobs:
           git push origin "v$VERSION"
           gh release create "v$VERSION" packages/vscode/route-scout.vsix \
             --title "v$VERSION" --generate-notes
+
+      - name: Publish to VS Marketplace
+        if: ${{ steps.check.outputs.release == 'true' && env.VSCE_PAT != '' }}
+        continue-on-error: true
+        working-directory: packages/vscode
+        run: pnpm exec vsce publish --packagePath route-scout.vsix
+
+      - name: Publish to Open VSX
+        if: ${{ steps.check.outputs.release == 'true' && env.OVSX_TOKEN != '' }}
+        continue-on-error: true
+        run: |
+          pnpm dlx ovsx create-namespace MathieuLeTyrant -p "$OVSX_TOKEN" || true
+          pnpm dlx ovsx publish packages/vscode/route-scout.vsix -p "$OVSX_TOKEN"
