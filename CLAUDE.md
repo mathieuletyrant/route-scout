@@ -39,9 +39,22 @@ Config-driven, **no AST / no framework coupling**. `buildIndex(config)`:
 Defaults: specs `**/openapi*` etc; sources common JS/TS; `ignoreImports: true`. Default matchers:
 `{operationId}` + `use{OperationId}` (covers generated clients + react-query/swr hooks).
 
-## VSCode extension (packages/vscode/src/extension.ts)
+## VSCode extension (packages/vscode/src)
+
+Split into focused modules (esbuild bundles from `extension.ts`, `.js` specifiers resolve to `.ts`):
+`extension.ts` (activation + command wiring only), `store.ts` (the index: shared state +
+`ensureIndex`/`invalidate`/`byOperationId` + view singletons via `initViewState`), `providers.ts`
+(CodeLens / Definition / Hover), `tree.ts` (the Endpoints view), `commands.ts` (all command handlers),
+`config.ts` (`readConfig` + `ScoutConfig`), `nav.ts` (pure disambiguation logic, unit-tested), `log.ts`
+(the "Route Scout" output channel). Commands reference each other by **string id**, so there are no
+import cycles.
 
 - **Bundles core** (esbuild, CJS). View lives in the **bottom panel** (viewsContainers.panel).
+- **Logging**: `log.ts` owns a single `LogOutputChannel` ("Route Scout", `{ log: true }` — leveled +
+  timestamped, filterable via *Developer: Set Log Level*). `store` logs the indexing lifecycle (per-folder
+  counts, errors with a "Show logs" toast action); `commands.goToEndpoint` logs the **routing decision**
+  (candidates, identity tokens, chosen declaration or "ambiguous, prompting"). `Route Scout: Show Logs`
+  (`routeScout.showLogs`) reveals the channel.
 - CodeLens + Go-to-Definition are keyed on **`operationId: '…'` lines**, registered for JSON/YAML **and
   TS/JS** — so they work in OpenAPI specs *and* in NestJS `@ApiOperation({ operationId })` decorators.
   Cmd/Ctrl+Click on an operationId line → jump/peek its usages. Usages are **merged by operationId**
@@ -50,11 +63,15 @@ Defaults: specs `**/openapi*` etc; sources common JS/TS; `ignoreImports: true`. 
   dimensions (`server` | `tag` | `method`), e.g. `["server","tag"]` = server → tag → endpoints. Toggle
   it from the view title ("Group By…" presets). groupBy is display-only: changing it refreshes without a
   reindex (see `REINDEX_KEYS`).
-- **Disambiguation**: an operationId can map to several endpoints (api + internal). `disambiguate()`
-  narrows to the right one by exact spec-file match, else a leading path segment (`api`/`internal`)
-  present as a token in the file path (matches `*.api.controller.ts`). CodeLens is **per-endpoint**
-  (never merged) so counts match the tree; if still ambiguous it shows one lens per endpoint labelled by
-  server. (Bug we fixed: merging by operationId made the lens show 2 where the endpoint had 1.)
+- **Disambiguation** lives in `nav.ts` (pure, no `vscode`, unit-tested in `nav.test.ts` against a
+  sourcehub-like fixture: 2 servers × api/internal all exposing one operationId). An operationId can map
+  to several endpoints (api + internal, across servers). `disambiguate()` narrows to the right one by
+  exact spec-file match, else **identity-token overlap** with the document's path. The key idea:
+  `endpointIdentity(op)` derives channel + server tokens from the **spec file name + title** (e.g.
+  `orders-internal-openapi.json` → `{orders, internal}`) — not the URL path, which is identical across
+  channels (`/invoices/{id}`). CodeLens is **per-endpoint** (never merged) so counts match the tree; if
+  still ambiguous it shows one lens per endpoint labelled by server. (Bug we fixed: merging by
+  operationId made the lens show 2 where the endpoint had 1.)
 - **Hover + reverse nav**: hovering a usage (a `use{Op}` hook, an operationId, a client call) in any
   source file shows the endpoint (method/path/summary/server + usage count) and an **"Open in spec"**
   command link (`routeScout.openSpec` reveals the operationId line). Backed by a `symbolNav` map
@@ -63,8 +80,12 @@ Defaults: specs `**/openapi*` etc; sources common JS/TS; `ignoreImports: true`. 
   the cursor, using the same `symbolNav`. It jumps to the **declaration** (a `routeScout.definitions`
   file, e.g. `**/*.controller.ts` — scanned into `declarationNav`) if configured, else the spec;
   `definitions` is an extension-only nav setting (a cast `ScoutConfig` field, not in core). When an
-  operationId exists on several channels (api + internal), the endpoint quickpick + a path-segment
-  match on the declaration file pick the right controller.
+  operationId exists on several channels/servers, the endpoint quickpick picks the endpoint, then
+  `pickDeclaration()` routes to the right controller by scoring each declaration file against the chosen
+  endpoint's identity tokens (channel + server). If no single declaration clearly wins it returns
+  `{ ambiguous: true }` and the extension **prompts with a quickpick of the candidate files** rather than
+  silently jumping to an arbitrary one (the bug: a `.api`/`.internal` pair on the same URL path used to
+  land on whichever came first).
 - **`Route Scout: Initialize Config`** (`routeScout.initConfig`) scaffolds a `routescout.config.json`
   (detects specs, excludes generated dirs) and offers to set it as `configFile`.
 - Settings: `routeScout.specs`, `.sources`, `.exclude`, `.usage`, `.ignoreImports`, `.ignoreLines`,
