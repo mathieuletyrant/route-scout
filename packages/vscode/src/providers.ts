@@ -40,6 +40,24 @@ export class UsageDefinitionProvider implements vscode.DefinitionProvider {
   }
 }
 
+/**
+ * Are these same-operationId endpoints impossible to tell apart from a call
+ * site? Without `clients`, nothing attributes usages, so any collision is
+ * ambiguous. With `clients`, usages are attributed by spec — so only a
+ * duplicate operationId **within one spec** (e.g. api + internal channels in
+ * the same document) stays ambiguous.
+ */
+function ambiguous(endpoints: Scouted[]): boolean {
+  if (endpoints.length <= 1) return false;
+  if (!hasClients()) return true;
+  const perSpec = new Map<string, number>();
+  for (const { endpoint } of endpoints) {
+    const spec = endpoint.operation.specFile;
+    perSpec.set(spec, (perSpec.get(spec) ?? 0) + 1);
+  }
+  return [...perSpec.values()].some((n) => n > 1);
+}
+
 /** Hover on a usage (a hook / operationId / client call) → endpoint + link to its spec. */
 export class EndpointHoverProvider implements vscode.HoverProvider {
   provideHover(document: vscode.TextDocument, position: vscode.Position): vscode.Hover | undefined {
@@ -53,11 +71,9 @@ export class EndpointHoverProvider implements vscode.HoverProvider {
     const matches = symbolNav.get(document.getText(range));
     if (!matches || matches.length === 0) return undefined;
 
-    // Without `clients`, one operationId maps to several endpoints that all
-    // carry the SAME merged count (not attributable) — show it once as "shared".
-    // With `clients`, usages are attributed per-endpoint so the counts are real
-    // and we show them per row.
-    const shared = matches.length > 1 && !hasClients();
+    // Show the count once as "shared" only when it genuinely can't be split:
+    // an operationId collision that `clients` can't attribute (see `ambiguous`).
+    const shared = ambiguous(matches);
 
     const md = new vscode.MarkdownString();
     md.isTrusted = true;
@@ -115,9 +131,9 @@ export class UsageCodeLensProvider implements vscode.CodeLensProvider {
       // Usually one endpoint per id → a plain "⟶ N usages". When an id stays
       // ambiguous, one lens per endpoint, labelled by server to tell them apart.
       const multiple = endpoints.length > 1;
-      // Without `clients` the id's count is the merged operationId total across
-      // endpoints — flag it "(shared)". With `clients` it's attributed, so no flag.
-      const shared = group.length > 1 && !hasClients();
+      // Flag "(shared)" only for a collision `clients` can't attribute — i.e. the
+      // same operationId duplicated within one spec (see `ambiguous`).
+      const shared = ambiguous(group);
       for (const scouted of endpoints) {
         const count = scouted.endpoint.callSites.length;
         const usages = count > 0 ? `${count} usage${count === 1 ? '' : 's'}` : 'no usages';

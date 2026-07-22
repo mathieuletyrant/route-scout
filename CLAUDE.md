@@ -85,11 +85,12 @@ import cycles.
   channels (`/invoices/{id}`). CodeLens is **per-endpoint** (never merged) so counts match the tree; if
   still ambiguous it shows one lens per endpoint labelled by server. (Bug we fixed: merging by
   operationId made the lens show 2 where the endpoint had 1.)
-- **Shared-usage labelling** (fallback only when `clients` is **not** configured): without `clients`,
-  usages are indexed by operationId, so an id on several endpoints carries the SAME merged count — the UI
-  says so (CodeLens `(shared)`; hover shows the count once, "N usages shared across M endpoints … not
-  attributable individually"). **With `clients`, usages are attributed per-endpoint**, so counts are real
-  and the label is suppressed (`store.hasClients()` gates it in `providers.ts`).
+- **Shared-usage labelling** (`ambiguous()` in `providers.ts`): a same-operationId collision is flagged
+  `(shared)` (CodeLens) / shown once ("N usages shared across M endpoints … not attributable
+  individually", hover) **only when it can't be attributed**. Without `clients`, any collision is
+  ambiguous. With `clients`, usages are attributed by spec, so only a **duplicate operationId within one
+  spec** stays ambiguous (e.g. `createMDMControl` on both `POST /api/...` and `POST /internal/...` in
+  `mdm-server-openapi.json` — the generated client exposes one symbol, so a call site can't say which).
 - **Hover + reverse nav**: hovering a usage (a `use{Op}` hook, an operationId, a client call) in any
   source file shows the endpoint (method/path/summary/server + usage count) and an **"Open in spec"**
   command link (`routeScout.openSpec` reveals the operationId line). Backed by a `symbolNav` map
