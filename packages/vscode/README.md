@@ -59,6 +59,8 @@ Each matcher's `template` is expanded per operation. Placeholders:
 - **`symbol`** matches a whole identifier (fast, precise for generated clients).
 - **`regex`** matches a regular expression against each line; values are auto-escaped, `{pathRegex}`
   turns `{param}` segments into `[^/]+`.
+- **`files`** (optional) restricts a matcher to the files it makes sense in — a substring or glob, e.g.
+  `"files": "crons.json"`. Also keeps the scan fast: a scoped matcher is skipped outright elsewhere.
 
 ### Generated clients (`clients`)
 
@@ -87,6 +89,39 @@ declared client**, and it's attributed to that client's spec.
   client(s) the file imports from.
 - Anything not linked to a client — a controller method, a look-alike local function — is ignored.
 - Leave `clients` empty to keep the default "every hit counts" behavior.
+
+#### Files that call endpoints without importing anything (`files`)
+
+Some callers aren't code: a cron manifest, a gateway route table, an HTTP-file collection. They name an
+endpoint by `path` (or `operationId`) with no import to link them to a client, so client gating would drop
+them. Declare them with `files` instead of (or alongside) `module` — the **whole file** is then bound to
+that spec, and every matcher hit inside it counts:
+
+```jsonc
+"routeScout.clients": [
+  {
+    "spec": "mdm-server-openapi.json",
+    "module": ["mdm-server-client", "providers/mdmServer/__generated__"],
+    "files": "apps/mdm-server/crons.json"
+  }
+]
+```
+
+Add the file to `routeScout.sources` (it isn't a `.ts`) and a matcher for how it names endpoints —
+scoped with `files` so it doesn't run over your whole codebase:
+
+```jsonc
+"routeScout.sources": ["apps/**/src/**/*.{ts,tsx}", "apps/*/crons.json"],
+"routeScout.usage": [
+  // …your existing matchers
+  { "kind": "regex", "template": "\"path\"\\s*:\\s*\"{path}\"", "files": "crons.json" }
+]
+```
+
+> Use `{path}` (exact) rather than `{pathRegex}` here: `{pathRegex}` turns `/runs/{id}` into `/runs/[^/]+`,
+> which would also swallow a sibling route like `/runs/dispatch-sync`. Matchers are line-based, so a
+> manifest that puts the HTTP method on another line (or in a `defaults` block) is matched on path alone —
+> if the same path exists under two methods, both endpoints get the hit.
 
 > Using [Orval](https://orval.dev/)? Your per-app `orval.config.*` already maps each spec (`input`) to a
 > client directory (`output`) — that's exactly one `clients` entry each.

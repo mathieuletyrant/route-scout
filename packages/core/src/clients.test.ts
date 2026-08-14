@@ -3,7 +3,13 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import { buildIndex } from './build.js';
-import { clientSpecsForModule, moduleMatches, normalizeImport, resolveClients } from './clients.js';
+import {
+  clientSpecsForFile,
+  clientSpecsForModule,
+  moduleMatches,
+  normalizeImport,
+  resolveClients,
+} from './clients.js';
 import type { ClientConfig } from './config.js';
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), '..', 'test', 'fixtures-clients');
@@ -60,6 +66,27 @@ describe('resolveClients / clientSpecsForModule', () => {
   });
 });
 
+describe('clientSpecsForFile', () => {
+  const resolved = resolveClients(
+    [{ files: ['apps/billing/crons.json', 'config/*-routes.json'], spec: 'billing-api' }],
+    ['specs/orders-api-openapi.json', 'specs/billing-api-openapi.json'],
+  );
+
+  it('binds a whole file to its client spec, imports or not', () => {
+    expect(clientSpecsForFile('apps/billing/crons.json', resolved)).toEqual(
+      new Set(['specs/billing-api-openapi.json']),
+    );
+    expect(clientSpecsForFile('config/internal-routes.json', resolved)).toEqual(
+      new Set(['specs/billing-api-openapi.json']),
+    );
+    expect(clientSpecsForFile('apps/orders/crons.json', resolved).size).toBe(0);
+  });
+
+  it('is empty for a client declared by module only', () => {
+    expect(clientSpecsForFile('apps/billing/crons.json', resolveClients(CLIENTS, [])).size).toBe(0);
+  });
+});
+
 describe('buildIndex with clients (per-endpoint attribution)', () => {
   const config = {
     root: FIXTURES,
@@ -88,6 +115,50 @@ describe('buildIndex with clients (per-endpoint attribution)', () => {
     // Decoys (controller method + local usecase) never count.
     const allFiles = r.endpoints.flatMap((e) => e.callSites.map((s) => s.file));
     expect(allFiles.some((f) => f.includes('decoy'))).toBe(false);
+  });
+
+  // A cron manifest references endpoints declaratively — no import to bind — so
+  // it's linked to its spec by a client's `files` glob instead.
+  describe('file-declared clients (cron manifests & co)', () => {
+    const cronConfig = {
+      ...config,
+      sources: ['src/**/*.ts', 'crons/*.json'],
+      // Scoped to the manifests: it would be dead weight on every .ts file.
+      usage: [
+        ...config.usage,
+        { kind: 'regex' as const, template: '"path"\\s*:\\s*"{path}"', files: 'crons/' },
+      ],
+    };
+
+    it('counts declarative hits and attributes them to the declared spec', async () => {
+      const r = await buildIndex({
+        ...cronConfig,
+        clients: [
+          CLIENTS[0]!,
+          { ...CLIENTS[1]!, files: 'crons/billing-crons.json' },
+          // The path matcher alone can't tell the specs apart; `files` does.
+        ],
+      });
+
+      const billingCronSites = getThing(r, 'specs/billing-api-openapi.json')?.callSites.filter(
+        (s) => s.file.startsWith('crons/'),
+      );
+      // Both the `"path": "/things/query"` line and the `"operationId"` line.
+      expect(billingCronSites?.map((s) => s.line)).toEqual([8, 13]);
+
+      const ordersCronSites = getThing(r, 'specs/orders-api-openapi.json')?.callSites.filter((s) =>
+        s.file.startsWith('crons/'),
+      );
+      expect(ordersCronSites).toEqual([]);
+    });
+
+    it('drops the manifest when no client declares it (no imports to link)', async () => {
+      const r = await buildIndex({ ...cronConfig, clients: CLIENTS });
+      const cronSites = r.endpoints.flatMap((e) =>
+        e.callSites.filter((s) => s.file.startsWith('crons/')),
+      );
+      expect(cronSites).toEqual([]);
+    });
   });
 
   it('without clients, the shared operationId collides (both endpoints see every hit)', async () => {

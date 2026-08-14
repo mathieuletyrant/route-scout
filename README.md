@@ -65,6 +65,7 @@ Each `usage` matcher has a `template` expanded per operation, with placeholders:
 
 - `symbol` matchers match a **whole identifier** (fast; the default).
 - `regex` matchers match a **regular expression** per line (values auto-escaped; `{pathRegex}` raw).
+- `files` restricts a matcher to the files it makes sense in (e.g. `"files": "crons.json"`).
 
 Defaults target the common case:
 
@@ -83,10 +84,10 @@ symbol into scope never counts as usage.
 Route Scout matches by convention, not by type resolution — it's fast, language-agnostic, and honest
 about being a heuristic. `operationId`s are usually distinctive enough that collisions are rare; tune
 the matchers to your codebase. When a name still collides with something unrelated (e.g. an Apollo
-`const [getDevice] = useGetDeviceLazyQuery()`), enable **`importAware`** to only count identifiers that
-were actually imported (optionally restricted to your generated-client modules via `importFrom`). It
-does not follow re-exports or resolve dynamic URLs. Operations with no `operationId` can only be matched
-by `regex`/`{path}` matchers.
+`const [getDevice] = useGetDeviceLazyQuery()`), or when the same `operationId` lives on several
+endpoints, declare your generated **`clients`**: a hit then counts only if it's linked to one, and it's
+attributed to that client's spec. It does not follow re-exports or resolve dynamic URLs. Operations with
+no `operationId` can only be matched by `regex`/`{path}` matchers.
 
 ## Example: Nx monorepo with Orval clients
 

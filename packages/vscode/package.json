@@ -2,7 +2,7 @@
   "name": "route-scout-vscode",
   "displayName": "Route Scout",
   "description": "Find where each OpenAPI endpoint is used — CodeLens, tree view, and quick search over your specs.",
-  "version": "0.7.3",
+  "version": "0.8.0",
   "publisher": "MathieuLeTyrant",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -101,6 +101,16 @@
               "flags": {
                 "type": "string",
                 "description": "Extra RegExp flags (regex matchers only)."
+              },
+              "files": {
+                "type": [
+                  "string",
+                  "array"
+                ],
+                "items": {
+                  "type": "string"
+                },
+                "markdownDescription": "Restrict this matcher to files whose path matches one of these substrings/globs (default: every scanned file). Use it for a matcher that only makes sense in one kind of file — e.g. `\"path\": \"{path}\"` in a cron manifest. It also keeps the scan fast."
               }
             }
           },
@@ -143,6 +153,16 @@
                 },
                 "markdownDescription": "Import-path substring(s)/glob(s) identifying the generated client's module (matched against the specifier for bare/alias imports and the resolved path for relative imports)."
               },
+              "files": {
+                "type": [
+                  "string",
+                  "array"
+                ],
+                "items": {
+                  "type": "string"
+                },
+                "markdownDescription": "File substring(s)/glob(s) whose **whole content** talks to this spec, imports or not — for files that reference endpoints declaratively (a cron manifest listing `\"path\": \"/internal/…\"`, a route table). Every matcher hit in such a file counts, attributed to this spec."
+              },
               "spec": {
                 "type": [
                   "string",
@@ -155,8 +175,19 @@
               }
             },
             "required": [
-              "module",
               "spec"
+            ],
+            "anyOf": [
+              {
+                "required": [
+                  "module"
+                ]
+              },
+              {
+                "required": [
+                  "files"
+                ]
+              }
             ]
           },
           "default": [],

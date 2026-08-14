@@ -2,7 +2,12 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { glob } from 'tinyglobby';
 
-import { clientSpecsForModule, normalizeImport, resolveClients } from './clients.js';
+import {
+  clientSpecsForFile,
+  clientSpecsForModule,
+  normalizeImport,
+  resolveClients,
+} from './clients.js';
 import { type RouteScoutConfig, resolveConfig } from './config.js';
 import { compileMatchers } from './patterns.js';
 import { maskImports, parseImports, scanContent } from './scan.js';
@@ -60,10 +65,13 @@ export async function buildIndex(
     // before masking). `symbolSpec`: an imported identifier → its client's spec
     // files. `fileSpecs`: every client spec the file imports from — used for
     // property-access calls where the operationId isn't itself imported.
+    // `declaredSpecs`: specs this file is bound to by a client's `files` glob.
     let keep: ((op: number, identifier: string | null) => boolean) | undefined;
     if (gated) {
       const symbolSpec = new Map<string, Set<string>>();
       const fileSpecs = new Set<string>();
+      const declaredSpecs = clientSpecsForFile(relFile, resolvedClients);
+      for (const spec of declaredSpecs) fileSpecs.add(spec);
       for (const imported of parseImports(content)) {
         const specs = clientSpecsForModule(
           normalizeImport(imported.module, relFile),
@@ -82,8 +90,14 @@ export async function buildIndex(
         // Symbol hit: counts only if that identifier was imported from a client
         // (a real hook/function call), attributed to that client's spec. A bare
         // non-imported name — a wrapper method declaration, a local call — is not
-        // a client usage, so it's dropped (no file-level fallback for symbols).
-        if (identifier !== null) return symbolSpec.get(identifier)?.has(opSpec) ?? false;
+        // a client usage, so it's dropped (no file-level fallback for symbols)…
+        if (identifier !== null) {
+          if (symbolSpec.get(identifier)?.has(opSpec)) return true;
+          // …except in a file declared via a client's `files` glob: it has no
+          // imports to bind (a cron manifest, a route table), so the whole file
+          // stands in for the client.
+          return declaredSpecs.has(opSpec);
+        }
         // Property-access / regex hit (`.op(`): attributed to the client(s) the
         // file imports from.
         return fileSpecs.has(opSpec);

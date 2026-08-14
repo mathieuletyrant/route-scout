@@ -1,27 +1,19 @@
 import { posix } from 'node:path';
 
 import type { ClientConfig } from './config.js';
+import { asArray, patternMatches } from './match.js';
 
 const toPosix = (p: string): string => p.split('\\').join('/');
-const asArray = (v: string | string[]): string[] => (Array.isArray(v) ? v : [v]);
 
-/** A client with its module patterns and the concrete spec files it resolved to. */
+/** A client with its module/file patterns and the concrete spec files it resolved to. */
 export interface ResolvedClient {
   modules: string[];
+  files: string[];
   specFiles: string[];
 }
 
 /** `true` when `pattern` matches `str`: glob semantics if it contains `*`, else substring. */
-export function moduleMatches(pattern: string, str: string): boolean {
-  if (!pattern.includes('*')) return str.includes(pattern);
-  const re = new RegExp(
-    pattern
-      .split('*')
-      .map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-      .join('.*'),
-  );
-  return re.test(str);
-}
+export const moduleMatches = patternMatches;
 
 /**
  * Normalize an import specifier to a string matchable against a client `module`.
@@ -40,6 +32,7 @@ export function normalizeImport(specifier: string, importerRelFile: string): str
 export function resolveClients(clients: ClientConfig[], specFiles: string[]): ResolvedClient[] {
   return clients.map((client) => ({
     modules: asArray(client.module),
+    files: asArray(client.files),
     specFiles: specFiles.filter((sf) => asArray(client.spec).some((p) => moduleMatches(p, sf))),
   }));
 }
@@ -52,6 +45,21 @@ export function clientSpecsForModule(
   const specs = new Set<string>();
   for (const client of clients) {
     if (client.modules.some((m) => moduleMatches(m, normalizedModule))) {
+      for (const sf of client.specFiles) specs.add(sf);
+    }
+  }
+  return specs;
+}
+
+/**
+ * The spec files of every client whose `files` patterns match `relFile` — i.e.
+ * the specs this whole file is declared to talk to, independently of imports.
+ */
+export function clientSpecsForFile(relFile: string, clients: ResolvedClient[]): Set<string> {
+  const specs = new Set<string>();
+  const file = toPosix(relFile);
+  for (const client of clients) {
+    if (client.files.some((f) => moduleMatches(f, file))) {
       for (const sf of client.specFiles) specs.add(sf);
     }
   }

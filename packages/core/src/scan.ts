@@ -1,3 +1,4 @@
+import { anyPatternMatches } from './match.js';
 import type { CompiledMatchers } from './patterns.js';
 import type { CallSite } from './types.js';
 
@@ -101,8 +102,15 @@ export function scanContent(
   const hits: Hit[] = [];
   const lines = content.split(/\r?\n/);
   const previewLines = previewContent.split(/\r?\n/);
+  // File-scoped matchers are resolved once per file (one pattern test per scope),
+  // before the line loop — a matcher that can't apply here costs nothing per line.
+  const active = matchers.scopes.map((s) => anyPatternMatches(s.files, relFile));
+  const inScope = (scope: number): boolean => scope < 0 || active[scope] === true;
+  const regexes = active.some(Boolean)
+    ? matchers.regexes.concat(...matchers.scopes.filter((_, i) => active[i]).map((s) => s.regexes))
+    : matchers.regexes;
   const hasSymbols = matchers.symbols.size > 0;
-  const hasRegexes = matchers.regexes.length > 0;
+  const hasRegexes = regexes.length > 0;
 
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i]!;
@@ -118,6 +126,7 @@ export function scanContent(
         const refs = matchers.symbols.get(token[0]);
         if (!refs) continue;
         for (const ref of refs) {
+          if (!inScope(ref.scope)) continue;
           if (keep && !keep(ref.op, token[0])) continue;
           hits.push({
             op: ref.op,
@@ -134,7 +143,7 @@ export function scanContent(
     }
 
     if (hasRegexes) {
-      for (const matcher of matchers.regexes) {
+      for (const matcher of regexes) {
         if (matcher.anchor && !line.includes(matcher.anchor)) continue;
         if (keep && !keep(matcher.op, null)) continue;
         matcher.regex.lastIndex = 0;

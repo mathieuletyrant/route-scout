@@ -27,23 +27,31 @@ Config-driven, **no AST / no framework coupling**. `buildIndex(config)`:
    expanded per operation via `placeholders.ts` (`{operationId}`, `{OperationId}`,
    `{operationId:camel|pascal|kebab|snake|constant}`, `{method}`, `{METHOD}`, `{path}`, `{pathRegex}`).
    - `kind: 'symbol'` → whole-identifier match (fast; default). `kind: 'regex'` → per-line regex.
+   - A matcher may declare **`files`** (substring/glob) to restrict it to one kind of file. Scoped
+     matchers are grouped into `CompiledMatchers.scopes` and resolved **once per file** (one pattern
+     test per scope), so an unrelated file pays nothing — measured on sourcehub, an unscoped
+     `"path": "{path}"` matcher cost +65% scan time; scoped it's free.
 3. `scan.ts` — scan source files. `maskImports()` blanks `import` / `export … from` / side-effect
    imports **multi-line aware, preserving line/column positions** (so imported symbols never count as
    usage). `scanContent()` matches against masked content but previews from the original, and takes an
    optional `keep(op, identifier)` predicate (client gating, below). `parseImports()` returns each
    import's `{ module, idents }` for that gating.
-4. `clients.ts` — **the client model.** `clients: [{ module, spec }]`. `normalizeImport()` turns an import
+4. `clients.ts` — **the client model.** `clients: [{ module, spec, files? }]`. `normalizeImport()` turns an import
    specifier into something matchable: **relative** specifiers are resolved to a repo-relative path
    (`../__generated__/client.js` → `apps/…/providers/companyServer/__generated__/client`), bare/alias
    kept as-is (`~/__generated__/mdm-server-client/…`). `resolveClients()` maps each client's `spec` to
    concrete spec files; `clientSpecsForModule()` returns the spec(s) a normalized module belongs to.
+   A client may also (or only) declare **`files`** — glob(s) of files whose *whole content* talks to that
+   spec, imports or not (`clientSpecsForFile()`): cron manifests, route tables, `.http` collections.
 5. `build.ts` — orchestrates; dedupes call sites per (file,line); returns `IndexResult` (incl. `files`).
    **Client gating** (only when `clients` non-empty): per file, link imports to clients, then keep a hit
    iff it's client-linked — a **symbol** hit counts only if that identifier was **imported from a client**
    (→ that client's spec); a **property-access/regex** hit (`.op(`) counts for the client(s) the file
    imports from. So an `operationId` shared by several endpoints is attributed to the right one, and
-   look-alike code (a controller method / local service named like an operationId) is ignored. Empty
-   `clients` = every matcher hit counts (legacy behavior).
+   look-alike code (a controller method / local service named like an operationId) is ignored. A file
+   matching a client's **`files`** glob is linked to that client outright — and *its* symbol hits count
+   too (the file-level fallback applies, since there are no imports to bind). Empty `clients` = every
+   matcher hit counts (legacy behavior).
 6. `naming.ts` — `serverName(op)`: `info.title` else filename with `-openapi`/`swagger` stripped.
 
 Defaults: specs `**/openapi*` etc; sources common JS/TS; `ignoreImports: true`; `clients: []`. Default

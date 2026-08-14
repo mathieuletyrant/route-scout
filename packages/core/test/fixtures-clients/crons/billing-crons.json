@@ -1,0 +1,16 @@
+{
+  "baseUrls": { "production": "https://billing.example.com" },
+  "defaults": { "method": "POST" },
+  "crons": [
+    {
+      "name": "Refresh things",
+      "cronExpression": "*/15 * * * *",
+      "path": "/things/query"
+    },
+    {
+      "name": "Refresh things (by id)",
+      "cronExpression": "0 0 * * *",
+      "operationId": "getThing"
+    }
+  ]
+}

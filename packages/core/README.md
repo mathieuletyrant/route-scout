@@ -41,6 +41,9 @@ A matcher describes one way an endpoint can appear in code. The `template` is ex
   matches whole identifiers. Fast; the right default for generated clients.
 - **`regex`** — the expanded template is a regular expression matched against each line. Values are
   regex-escaped automatically; `{pathRegex}` is injected raw.
+- **`files`** — optional substring/glob(s) restricting a matcher to the files it makes sense in (e.g.
+  a `"path": "{path}"` matcher for cron manifests). Scoped matchers are resolved once per file, so
+  they cost nothing on the files they don't target.
 
 `ignoreLines` (default: `import` / `export … from` lines) drops lines before matching, so imports don't
 count as usage.

@@ -1,6 +1,7 @@
 export type { BuildOptions, ProgressReporter } from './build.js';
 export { buildIndex } from './build.js';
 export {
+  clientSpecsForFile,
   clientSpecsForModule,
   moduleMatches,
   normalizeImport,

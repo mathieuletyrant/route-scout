@@ -56,6 +56,21 @@ describe('buildIndex', () => {
     expect(find(result, 'getPetById').callSites).toHaveLength(0);
   });
 
+  it('restricts a file-scoped matcher to the files it targets', async () => {
+    const template = 'fetch\\([\'"]{path}[\'"]';
+    const inScope = await buildIndex({
+      root: FIXTURES,
+      usage: [{ kind: 'regex', template, files: 'src/admin.ts' }],
+    });
+    expect(find(inScope, 'listPets').callSites).toHaveLength(1);
+
+    const outOfScope = await buildIndex({
+      root: FIXTURES,
+      usage: [{ kind: 'regex', template, files: ['src/pets-*.ts'] }],
+    });
+    expect(find(outOfScope, 'listPets').callSites).toHaveLength(0);
+  });
+
   it('honours a custom usage matcher list', async () => {
     const result = await buildIndex({
       root: FIXTURES,

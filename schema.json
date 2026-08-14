@@ -63,6 +63,11 @@
           "flags": {
             "type": "string",
             "description": "Extra RegExp flags (regex matchers only)."
+          },
+          "files": {
+            "type": ["string", "array"],
+            "items": { "type": "string" },
+            "description": "Restrict this matcher to files whose path matches one of these substrings/globs (default: every scanned file). Use it for a matcher that only makes sense in one kind of file — it also keeps the scan fast."
           }
         }
       },
@@ -93,13 +98,19 @@
             "items": { "type": "string" },
             "description": "Import-path substring(s)/glob(s) identifying the client module. Matched against the specifier for bare/alias imports and the resolved repo-relative path for relative imports."
           },
+          "files": {
+            "type": ["string", "array"],
+            "items": { "type": "string" },
+            "description": "File substring(s)/glob(s) whose whole content talks to this spec, imports or not — for files that reference endpoints declaratively (a cron manifest listing \"path\": \"/internal/…\", a route table). Every matcher hit in such a file counts, attributed to this spec."
+          },
           "spec": {
             "type": ["string", "array"],
             "items": { "type": "string" },
             "description": "Spec-filename substring(s)/glob(s) this client talks to (e.g. mdm-server-openapi.json)."
           }
         },
-        "required": ["module", "spec"],
+        "required": ["spec"],
+        "anyOf": [{ "required": ["module"] }, { "required": ["files"] }],
         "additionalProperties": false
       },
       "default": []

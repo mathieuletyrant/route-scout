@@ -24,6 +24,14 @@ export interface UsageMatcher {
   template: string;
   /** Extra RegExp flags for `regex` matchers (always case-sensitive line scan otherwise). */
   flags?: string;
+  /**
+   * Restrict this matcher to the files whose path matches one of these
+   * substrings/globs. Defaults to every scanned file. Use it for a matcher that
+   * only makes sense in one kind of file — a `"path": "{path}"` matcher for cron
+   * manifests — both to avoid spurious hits elsewhere and to keep the scan fast
+   * (a per-operation regex is skipped outright on files it can't apply to).
+   */
+  files?: string | string[];
 }
 
 /**
@@ -35,7 +43,8 @@ export interface UsageMatcher {
  * service) is ignored.
  *
  * A call is linked to a client when the matched symbol was imported from one of
- * its `module`s, or (for property-access calls) when the file imports from one.
+ * its `module`s, or (for property-access calls) when the file imports from one,
+ * or when the file itself matches one of its `files` patterns.
  */
 export interface ClientConfig {
   /**
@@ -43,8 +52,19 @@ export interface ClientConfig {
    * module. Matched against the import specifier for bare/alias imports
    * (`~/__generated__/mdm-server-client/…`) and against the **resolved**
    * repo-relative path for relative imports (`../__generated__/client.js`).
+   *
+   * Optional when {@link files} is set (a file-declared client has no imports).
    */
-  module: string | string[];
+  module?: string | string[];
+  /**
+   * Repo-relative file substring(s)/glob(s) whose **whole content** talks to
+   * this client's spec, imports or not. For files that reference endpoints
+   * declaratively rather than by calling a generated client — a cron manifest
+   * (`apps/mdm-server/crons.json`) listing `"path": "/internal/…"`, a gateway
+   * route table, an HTTP-file collection. Every matcher hit in such a file
+   * counts and is attributed to this client's spec.
+   */
+  files?: string | string[];
   /** Spec-filename substring(s)/glob(s) this client talks to (e.g. `mdm-server-openapi.json`). */
   spec: string | string[];
 }
